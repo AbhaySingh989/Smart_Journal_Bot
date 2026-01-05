@@ -16,3 +16,13 @@ Observations/
 
 # Windows thumbnail cache
 Thumbs.db
+
+# OCI Secrets and Keys
+*.key
+*.pem
+*.pub
+OCI_Secrets/
+
+# OCI Documentation to ignore
+docs/OCI bot commands_ref.txt
+docs/OCI_Deployment_Guide.md

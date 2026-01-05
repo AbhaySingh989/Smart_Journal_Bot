@@ -6,7 +6,7 @@ services:
     container_name: smart_journal_bot
     restart: always
     ports:
-      - "5000:5000"
+      - "8443:5000"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
