@@ -15,6 +15,7 @@ from telegram.ext import ContextTypes
 import google.generativeai as genai
 from google.generativeai.types import SafetySettingDict, HarmCategory, HarmBlockThreshold
 from google.generativeai import types as genai_types
+import google.api_core.exceptions
 
 # File / Environment
 import PIL.Image # Pillow for image handling
@@ -51,6 +52,47 @@ VISUALIZATIONS_DIR = ""
 
 # --- TOKEN TRACKING CACHE ---
 token_data_cache = {"session": 0} # In-memory cache for session tokens
+
+# --- RATE LIMITER ---
+class RateLimiter:
+    def __init__(self, rpm: int, rpd: int):
+        self.rpm = rpm
+        self.rpd = rpd
+        self.request_timestamps = []
+        self.daily_count = 0
+        self.daily_reset_time = datetime.now() + timedelta(days=1)
+        self.lock = asyncio.Lock()
+
+    async def acquire(self):
+        async with self.lock:
+            now = datetime.now()
+            # Reset daily count if needed
+            if now > self.daily_reset_time:
+                self.daily_count = 0
+                self.daily_reset_time = now + timedelta(days=1)
+
+            if self.daily_count >= self.rpd:
+                logger.error("Daily Gemini API limit reached.")
+                # We don't raise here to allow logic to attempt and fail gracefully or switch keys if implemented later
+                # For now, we just warn and proceed, let the API reject if it enforces strict daily caps 
+                # (API usually enforces RPM strictly, RPD is soft or billable check, but Free tier is strict)
+                
+            # Filter timestamps older than 1 minute
+            self.request_timestamps = [t for t in self.request_timestamps if now - t < timedelta(seconds=60)]
+            
+            if len(self.request_timestamps) >= self.rpm:
+                # Wait until the oldest request expires
+                wait_time = 60 - (now - self.request_timestamps[0]).total_seconds() + 0.1 # Buffer
+                if wait_time > 0:
+                    logger.warning(f"Rate limit approaching (local check). Waiting {wait_time:.2f}s...")
+                    await asyncio.sleep(wait_time)
+            
+            self.request_timestamps.append(datetime.now())
+            self.daily_count += 1
+
+# Initialize strict Free Tier limits for Gemini 2.5 Flash
+# 15 RPM, 1500 RPD
+global_rate_limiter = RateLimiter(rpm=15, rpd=1500)
 
 # --- INITIALIZATION FUNCTIONS (called from core.py) ---
 def set_global_paths(base_dir: str):
@@ -117,7 +159,32 @@ async def generate_gemini_response(prompt_parts: list, safety_settings_override=
     text_response = None
     try:
         logger.info(f"Sending request to Gemini ({len(prompt_parts)} parts)...")
-        response = await genai_model.generate_content_async(prompt_parts, safety_settings=safety_settings_override if safety_settings_override else safety_settings)
+        
+        # Retry Logic with Exponential Backoff
+        max_retries = 3
+        base_delay = 2
+        response = None
+        
+        for attempt in range(max_retries + 1):
+            try:
+                await global_rate_limiter.acquire()
+                response = await genai_model.generate_content_async(
+                    prompt_parts, 
+                    safety_settings=safety_settings_override if safety_settings_override else safety_settings
+                )
+                break # Success
+            except google.api_core.exceptions.ResourceExhausted as e:
+                if attempt < max_retries:
+                    delay = base_delay ** (attempt + 1)
+                    logger.warning(f"Gemini Rate Limit Hit (429) on attempt {attempt + 1}. Retrying in {delay}s...")
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("Max retries reached for Gemini API.")
+                    return "[API ERROR: Rate Limit Exceeded]", None
+        
+        if not response:
+             return "[API ERROR: Unknown Handling]", None
+
         if hasattr(response, 'usage_metadata'):
             usage_metadata = response.usage_metadata
             # Pass user_id, feature_used, model_name to increment_token_usage

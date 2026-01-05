@@ -25,7 +25,8 @@ from .utils import (
 )
 from .database import (
     get_user_profile, update_user_profile, get_token_summary,
-    add_journal_entry, update_journal_entry, get_journal_entries, search_journal_entries, get_all_journal_entries_for_user, add_ai_insight
+    add_journal_entry, update_journal_entry, get_journal_entries, search_journal_entries, get_all_journal_entries_for_user, add_ai_insight,
+    add_goal, get_active_goals
 )
 from .prompts import (
     PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT,
@@ -212,6 +213,33 @@ async def export_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 logger.info(f"Deleted temporary export file: {export_file_path}")
             except OSError as e_del:
                 logger.error(f"Error deleting temporary export file {export_file_path}: {e_del}")
+
+# --- GOAL TRACKING HANDLERS ---
+async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sets a new goal for the user."""
+    user_id = update.effective_user.id
+    if not context.args:
+        await update.message.reply_text("Usage: `/setgoal <Goal Name>`\nExample: `/setgoal Drink 2L water daily`", parse_mode=ParseMode.MARKDOWN_V2)
+        return
+    goal_name = " ".join(context.args).strip()
+    if await add_goal(user_id, goal_name):
+        await update.message.reply_text(f"✅ Goal set: *{escape_markdown(goal_name, version=2)}*", parse_mode=ParseMode.MARKDOWN_V2)
+    else:
+        await update.message.reply_text("❌ Failed to set goal.")
+
+async def my_goals_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Lists the user's active goals."""
+    user_id = update.effective_user.id
+    goals = await get_active_goals(user_id)
+    if not goals:
+        await update.message.reply_text("You have no active goals. Set one with `/setgoal`!")
+        return
+    
+    msg = "*Your Active Goals:*\n\n"
+    for goal in goals:
+        msg += f"• *{escape_markdown(goal['goal_name'], version=2)}* (Started: {escape_markdown(goal['start_date'], version=2)})\n"
+    
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN_V2)
 
 # --- ANALYTICS COMMAND HANDLERS ---
 
@@ -557,6 +585,8 @@ async def post_set_commands(application: Application) -> None:
         BotCommand("search", "Search your journal entries"),
         BotCommand("export", "Export all your journal entries"),
         BotCommand("analytics", "Get a visual report of your journaling habits"),
+        BotCommand("setgoal", "Set a personal goal"),
+        BotCommand("mygoals", "View your active goals"),
         BotCommand("end", "End the current session"),
         BotCommand("help", "Show the help message"),
         BotCommand("cancel", "Cancel the current action")

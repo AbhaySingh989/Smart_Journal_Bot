@@ -706,3 +706,83 @@ async def get_top_topics_overall(user_id: int, limit: int = 7, db_path: str = No
         return []
     finally:
         if conn: conn.close()
+
+# --- CRUD OPERATIONS FOR GOALS ---
+async def add_goal(user_id: int, goal_name: str, description: str = None, target_metric: str = None, db_path: str = None) -> str | None:
+    """Adds a new goal for the user."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path or DB_FILE, check_same_thread=False)
+        cursor = conn.cursor()
+        goal_id = str(uuid.uuid4())
+        start_date = datetime.now().strftime("%Y-%m-%d")
+
+        cursor.execute("""
+            INSERT INTO Goals (goal_id, user_id, goal_name, description, target_metric, start_date, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'active')
+        """, (goal_id, user_id, goal_name, description, target_metric, start_date))
+        
+        conn.commit()
+        logger.info(f"Added goal '{goal_name}' for user {user_id}.")
+        return goal_id
+    except sqlite3.Error as e:
+        logger.error(f"Error adding goal for user {user_id}: {e}", exc_info=True)
+        return None
+    finally:
+        if conn: conn.close()
+
+async def get_active_goals(user_id: int, db_path: str = None) -> list[dict]:
+    """Retrieves all active goals for a user."""
+    conn = None
+    goals = []
+    try:
+        conn = sqlite3.connect(db_path or DB_FILE, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Goals WHERE user_id = ? AND status = 'active' ORDER BY start_date DESC", (user_id,))
+        for row in cursor.fetchall():
+            goals.append(dict(row))
+        return goals
+    except sqlite3.Error as e:
+        logger.error(f"Error retrieving goals for user {user_id}: {e}", exc_info=True)
+        return []
+    finally:
+        if conn: conn.close()
+
+async def add_goal_progress(goal_id: str, notes: str, db_path: str = None) -> bool:
+    """Logs progress for a specific goal."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path or DB_FILE, check_same_thread=False)
+        cursor = conn.cursor()
+        progress_id = str(uuid.uuid4())
+        
+        cursor.execute("""
+            INSERT INTO GoalProgress (progress_id, goal_id, notes)
+            VALUES (?, ?, ?)
+        """, (progress_id, goal_id, notes))
+        
+        conn.commit()
+        logger.info(f"Logged progress for goal {goal_id}.")
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error logging progress for goal {goal_id}: {e}", exc_info=True)
+        return False
+    finally:
+        if conn: conn.close()
+
+async def complete_goal(goal_id: str, db_path: str = None) -> bool:
+    """Marks a goal as completed."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path or DB_FILE, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE Goals SET status = 'completed', end_date = ? WHERE goal_id = ?", 
+                       (datetime.now().strftime("%Y-%m-%d"), goal_id))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error completing goal {goal_id}: {e}", exc_info=True)
+        return False
+    finally:
+        if conn: conn.close()

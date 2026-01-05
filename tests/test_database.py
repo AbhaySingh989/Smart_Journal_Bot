@@ -12,20 +12,27 @@ from bot.database import (
     get_all_journal_entries_for_user, update_journal_entry
 )
 
-# Use a temporary in-memory database for testing
-TEST_DB_PATH = ":memory:"
+import tempfile
 
 @pytest.fixture(autouse=True)
 async def setup_and_teardown_db():
-    """Fixture to set up and tear down the in-memory database for each test."""
-    # Set the DB_FILE to an in-memory database for testing
-    # We need to patch the global DB_FILE in the bot.database module
-    with patch('bot.database.DB_FILE', TEST_DB_PATH):
-        await initialize_db()  # Initialize tables for each test
-        yield
-        # No explicit teardown needed for :memory: database, it's cleared on close
-        # but we can ensure the connection is closed if it were a file-based db
-        # For :memory:, it's implicitly closed when the connection object is garbage collected.
+    """Fixture to set up and tear down a temporary database for each test."""
+    # Create a temporary file
+    fd, temp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    
+    # Manually set the global DB_FILE
+    import bot.database
+    original_db_file = bot.database.DB_FILE
+    bot.database.DB_FILE = temp_path
+    
+    await initialize_db()
+    yield
+    
+    # Restore and Cleanup
+    bot.database.DB_FILE = original_db_file
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
 
 @pytest.mark.asyncio
 async def test_user_profile_crud():

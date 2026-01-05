@@ -5,3 +5,5 @@ python-dotenv
 Pillow
 graphviz
 aiosqlite
+pytest
+pytest-asyncio

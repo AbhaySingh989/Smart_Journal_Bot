@@ -30,7 +30,7 @@ from .database import set_db_path, initialize_db
 from .handlers import (
     start_command, help_command, set_username_command, tokens_command, search_command, export_command, analytics_command,
     cancel_command, end_session_command, mode_button_callback, handle_input,
-    error_handler, post_set_commands
+    error_handler, post_set_commands, set_goal_command, my_goals_command
 )
 
 # --- BASIC SETUP ---
@@ -55,7 +55,7 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
     exit("API Key or Webhook URL Error: Check .env file for TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, and WEBHOOK_URL.")
 
 # --- CONFIGURE GEMINI AI ---
-GEMINI_MODEL_NAME = 'gemini-2.0-flash-lite'
+GEMINI_MODEL_NAME = 'gemini-2.5-flash'
 try:
     # Initialize the Gemini AI client with the API key.
     genai.configure(api_key=GEMINI_API_KEY)
@@ -134,6 +134,8 @@ async def main() -> None:
             CommandHandler('search', search_command),
             CommandHandler('export', export_command),
             CommandHandler('analytics', analytics_command),
+            CommandHandler('setgoal', set_goal_command),
+            CommandHandler('mygoals', my_goals_command),
         ],
         allow_reentry=False
     )
@@ -145,7 +147,10 @@ async def main() -> None:
     application.add_handler(CommandHandler("tokens", tokens_command))
     application.add_handler(CommandHandler("search", search_command))
     application.add_handler(CommandHandler("export", export_command))
+    application.add_handler(CommandHandler("export", export_command))
     application.add_handler(CommandHandler("analytics", analytics_command))
+    application.add_handler(CommandHandler("setgoal", set_goal_command))
+    application.add_handler(CommandHandler("mygoals", my_goals_command))
 
     # This handler catches any message that isn't a command and isn't in a conversation.
     # It prompts the user to start the bot correctly.

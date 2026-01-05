@@ -22,16 +22,17 @@ The Journal Agent is a multi-modal Telegram bot designed to facilitate personal 
     *   **OCR Mode:** Specifically for extracting and displaying text content from images.
 *   **Journaling & AI Analysis:**
     *   Records journal entries with associated metadata (timestamp, input type, word count).
-    *   Performs AI-driven analysis to extract:
-        *   **Sentiment:** Overall emotional tone (e.g., Positive, Negative, Neutral).
-        *   **Topics:** Key themes and subjects discussed within the entry.
-        *   **Categories:** Assigns entries to predefined categories (e.g., Emotional, Workplace, Health).
-    *   Generates reflective "therapist-like" analysis based on the current entry and historical context.
-    *   Creates visual mind maps of journal content using Graphviz, aiding in conceptual understanding.
-*   **User Management:** Stores user profiles (username, approval status).
-*   **Token Usage Tracking:** Meticulously monitors and logs AI token consumption (prompt, completion, total) per interaction, categorized by feature and AI model used. This is crucial for cost analysis and optimization.
-*   **Command Handling:** Responds to various Telegram commands (e.g., /start, /help, /setusername, /tokens, /export).
-*   **Journal Export:** Allows users to export all their journal entries into a single downloadable text file.
+    *   Performs AI-driven analysis to extract sentiment, topics, and categories.
+    *   Generates visual reports via the `/analytics` command (Sentiment distribution, Topic trends).
+    *   Generates reflective "therapist-like" analysis and visual mind maps.
+*   **Goal Tracking:**
+    *   Allows users to set personal goals via `/setgoal`.
+    *   Tracks progress updates in the database.
+    *   Users can view multiple active goals via `/mygoals`.
+*   **User Management:** Stores user profiles and approval status.
+*   **Token Usage Tracking:** Monitors AI token consumption (prompt, completion, total) per interaction.
+*   **Command Handling:** Responds to commands including `/start`, `/help`, `/setusername`, `/tokens`, `/search`, `/export`, `/analytics`, `/setgoal`, `/mygoals`.
+*   **Journal Export:** Allows users to export entries as a text file.
 
 ---
 
@@ -63,17 +64,17 @@ The Journal Agent is a multi-modal Telegram bot designed to facilitate personal 
 *   **`threading`**: Python's built-in module for running code in separate threads.
     *   **Role**: Used in `app.py` to run the `asyncio` event loop in a dedicated background thread. This allows the synchronous Flask web server to safely interact with the asynchronous `python-telegram-bot` application without blocking the web server's main thread.
 *   **`uuid`**: Python's built-in module for generating Universally Unique Identifiers.
-    *   **Role**: Used to generate unique `entry_id`, `insight_id`, `mood_id`, `activity_id`, `goal_id`, `progress_id`, `prompt_id`, and `usage_id` values, ensuring global uniqueness across records.
+    *   **Role**: Used to generate unique IDs for entries, goals, and progress records.
+*   **`Docker` & `Docker Compose`**:
+    *   **Role**: Containerization for consistent deployment across local development and OCI production environments.
+*   **`pytest` & `pytest-asyncio`**:
+    *   **Role**: Automated unit and integration testing of database logic and bot handlers.
 
 ### 3.3. AI Models
 
-*   **Google Gemini (`gemini-1.5-flash-latest`)**: The primary generative AI model.
-    *   **Role**: Utilized for all AI-powered features:
-        *   **Chatbot:** General conversational responses.
-        *   **Journal Analysis:** Sentiment analysis, topic extraction, categorization, and reflective summaries.
-        *   **Audio Transcription:** Converting voice messages to text.
-        *   **OCR:** Extracting text from images.
-    *   **Justification**: Chosen for its multi-modal capabilities (handling text, audio, and vision inputs), its balance of performance and cost-effectiveness (`flash` model), and its continuous improvement by Google.
+*   **Google Gemini (`gemini-2.5-flash`)**: The primary generative AI model.
+    *   **Role**: Utilized for all AI-powered features: text analysis, summaries, audio transcription, and OCR.
+    *   **Justification**: Updated to `2.5-flash` for significantly faster response times and improved reasoning while staying within the Free Tier limits. Includes local `RateLimiter` to manage 15 RPM / 1500 RPD.
 
 ### 3.4. Data Storage
 
@@ -432,17 +433,18 @@ The bot operates on a webhook model, where Telegram pushes updates to a Flask we
 
 ```mermaid
 graph TD
-    TelegramUser --&gt; TelegramAPI
-    TelegramAPI --&gt; Webhook(HTTPS POST /webhook)
-    Webhook --&gt; FlaskApp(Flask Web App on PythonAnywhere)
-    FlaskApp --&gt; AsyncioThread(Background Asyncio Event Loop)
-    AsyncioThread --&gt; PTBApp(Python-Telegram-Bot Application)
-    PTBApp --&gt; GeminiAPI(Google Gemini API)
-    PTBApp --&gt; SQLiteDB(SQLite Database)
-    PTBApp --&gt; Graphviz(Graphviz System Executable)
-    GeminiAPI --&gt; PTBApp
-    SQLiteDB --&gt; PTBApp
-    Graphviz --&gt; PTBApp
+    TelegramUser --> TelegramAPI
+    TelegramAPI --> Webhook(HTTPS POST /webhook)
+    Webhook --> DockerContainer(Docker Container on OCI)
+    DockerContainer --> FlaskApp(Flask Web App)
+    FlaskApp --> AsyncioThread(Background Asyncio Event Loop)
+    AsyncioThread --> PTBApp(Python-Telegram-Bot Application)
+    PTBApp --> GeminiAPI(Google Gemini API)
+    PTBApp --> SQLiteDB(SQLite Database Volume)
+    PTBApp --> Graphviz(Graphviz System Library)
+    GeminiAPI --> PTBApp
+    SQLiteDB --> PTBApp
+    Graphviz --> PTBApp
 ```
 
 ### 4.2. Component Breakdown
@@ -598,18 +600,15 @@ Operating the Journal Agent bot involves several potential cost factors, especia
 ## 7. Version Control & Deployment
 
 *   **Version Control**: **Git** is used for source code management. The project follows a modular structure, facilitating collaborative development and organized change tracking.
-*   **Deployment on PythonAnywhere**:
-    1.  **Code Upload**: Upload the entire project directory to your PythonAnywhere account.
-    2.  **Virtual Environment**: Create and activate a virtual environment on PythonAnywhere.
-    3.  **Install Dependencies**: Run `pip install -r requirements.txt` within the virtual environment.
-    4.  **Web App Configuration**:
-        *   Configure a new web app on PythonAnywhere.
-        *   Set the "Source code" path to your project's root directory.
-        *   Set the "WSGI configuration file" to point to `app.py` (e.g., `/home/your_username/Journal-Agent/app.py`).
-        *   Set environment variables (`TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY`, `WEBHOOK_URL`) directly in the PythonAnywhere web app's "Environment variables" section. The `WEBHOOK_URL` will be your PythonAnywhere web app's domain (e.g., `https://your-username.pythonanywhere.com`).
-    5.  **Reload Web App**: After making changes or updating environment variables, reload the web app on PythonAnywhere to apply them.
-    6.  **Initial Database Creation**: The first time the web app loads, `bot/core.py` will call `initialize_db()` (from `bot/database.py`), creating the `bot_data/bot_data.db` file and populating the `Prompts` table.
-    7.  **Data Migration (if applicable)**: If migrating from old flat files, run `python migrate.py` in a PythonAnywhere Bash console *after* the web app has created the initial database.
+*   **Deployment**:
+    *   **Local**: Can be run natively or via Docker for testing.
+    *   **OCI (Production)**: Automated via Docker Compose.
+        1. Provision OCI Instance.
+        2. Set system dependencies (Docker).
+        3. Clone and set `.env`.
+        4. Run `docker-compose up -d`.
+    *   **SQLite Persistence**: Managed via Docker Volumes to ensure data survives container restarts.
+    *   **Rate Limiting**: Integrated `RateLimiter` handles Gemini API throttling automatically.
 
 ---
 

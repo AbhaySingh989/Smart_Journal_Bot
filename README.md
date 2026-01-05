@@ -1,22 +1,29 @@
-# Multimode Telegram Bot
+# 🤖 Multimode Telegram Bot 🚀
 
 This is a sophisticated, multi-functional Telegram bot designed to serve as a personal assistant. It can handle text, voice, and image inputs, and it offers a wide range of features, including real-time conversation, journaling, data visualization, and user profile management.
 
-## Features
+## ✨ Features
 
-- **Multi-modal Communication:** Interact with the bot using text, voice messages, or images.
-- **Journaling:** Keep a personal journal. The bot can store, retrieve, and analyze your journal entries.
-- **Data Visualization:** Generate mind maps of your journal data using `graphviz`.
-- **User Profiles:** The bot maintains user profiles to provide a personalized experience.
-- **Token Usage Tracking:** Monitors and logs the token usage for the generative AI models.
-- **Access Control:** A system for approving new users, managed by an administrator.
-- **Error Handling:** Robust error handling to ensure a smooth user experience.
+- **🎙️ Multi-modal Communication:** Interact with the bot using text, voice messages, or images.
+- **📔 Journaling:** Keep a personal journal. The bot can store, retrieve, and analyze your journal entries.
+- **📊 Analytics:** Get visual reports on sentiment, word counts, and topic trends over time.
+- **🎯 Goal Tracking:** Set personal goals and track your progress within the bot.
+- **🧠 Data Visualization:** Generate mind maps of your journal data using `graphviz`.
+- **👤 User Profiles:** The bot maintains user profiles to provide a personalized experience.
+- **🪙 Token Usage Tracking:** Monitors and logs the token usage for the generative AI models.
+- **🔐 Access Control:** A system for approving new users, managed by an administrator.
+- **🛡️ Error Handling & Rate Limiting:** Robust error handling and built-in rate limiting for Gemini Free Tier.
+- **☁️ OCI Ready:** Fully containerized with Docker for seamless deployment on Oracle Cloud.
 
-## Project Structure
+## 📂 Project Structure
 
 ```
 .
+├── .dockerignore
 ├── .env
+├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
 ├── app.py
 ├── requirements.txt
 ├── bot_data/
@@ -24,14 +31,17 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
 │   └── visualizations/
 │   └── bot_data.db
 ├── bot/
-│   ├── __init__.py
 │   ├── core.py
 │   ├── handlers.py
 │   ├── utils.py
-│   ├── constants.py
-│   ├── prompts.py
-│   └── database.py
-└── venv/
+│   └── ...
+├── docs/
+│   ├── OCI_Deployment_Guide.md
+│   ├── Product_Architecture.md
+│   └── ...
+├── scripts/
+│   └── migrate.py
+└── tests/
 ```
 
 - **`.env`**: Stores environment variables, including API keys and webhook URL.
@@ -51,16 +61,17 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
   - **`database.py`**: Manages all interactions with the SQLite database.
 - **`venv/`**: The Python virtual environment.
 
-## Getting Started
+## 🚀 Getting Started
 
-### Prerequisites
+### 📋 Prerequisites
 
-- Python 3.7+
+- Python 3.11+
 - A Telegram Bot Token
-- A Google API Key for Generative AI
-- `graphviz` (system-wide installation)
+- A Google API Key for Generative AI (Gemini 2.5 Flash)
+- `Docker` & `Docker Compose` (Recommended for OCI)
+- `graphviz` (System-wide if running natively)
 
-### Installation
+### 🛠️ Installation
 
 1.  **Clone the repository:**
     ```bash
@@ -104,14 +115,28 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
 2.  **Update `.env`:**
     Paste the copied `ngrok` URL into your `.env` file as the `WEBHOOK_URL`.
 
-3.  **Run the Flask application:**
-    Open a *separate* terminal, activate your virtual environment, and run the Flask app. This will set the webhook with Telegram using the `ngrok` URL.
+### Running the Bot (Docker - Recommended)
+
+1.  **Configure `.env`**: (Same as above)
+2.  **Build and Run**:
     ```bash
-    set FLASK_APP=app.py  # For Windows Command Prompt
-    # $env:FLASK_APP = "app.py" # For PowerShell
+    docker-compose up -d --build
+    ```
+    This will set up the bot and its dependencies in an OCI-ready containerized environment.
+
+### Running the Bot (Native Development)
+
+1.  **Run the Flask application**:
+    Open a terminal, activate your virtual environment, and run the Flask app.
+    ```bash
+    $env:FLASK_APP = "app.py"  # PowerShell
     python -m flask run
     ```
-    Your bot should now be live and accessible via Telegram.
+    Your bot is now live on `http://127.0.0.1:5000`. Use `ngrok` for external access as described above.
+
+### Deployment on OCI
+
+For detailed production deployment steps on Oracle Cloud Infrastructure, refer to the [OCI Deployment Guide](file:///docs/OCI_Deployment_Guide.md).
 
 ### Running the Bot (PythonAnywhere Deployment)
 
@@ -225,11 +250,11 @@ Your bot code automatically tries to set the webhook when it starts. All you nee
 
 Open Telegram and send the `/start` command to your bot. It should now be running live from your PythonAnywhere web app.
 
-## Usage
+## 💡 Usage
 
 Upon starting the bot, you will be presented with a choice of modes: Chatbot, Journal, or OCR. Select a mode to begin interacting with the bot.
 
-### User Commands
+### ⌨️ User Commands
 
 -   `/start`: Start the conversation with the bot.
 -   `/mode` or `/changemode`: Re-select the mode (Chatbot, Journal, or OCR).
@@ -237,32 +262,35 @@ Upon starting the bot, you will be presented with a choice of modes: Chatbot, Jo
 -   `/tokens`: Check your AI token usage.
 -   `/search`: Search your journal entries.
 -   `/export`: Export all your journal entries.
+-   `/analytics`: Get a visual report of your journaling habits.
+-   `/setgoal <Goal Name>`: Set a new personal goal.
+-   `/mygoals`: View your active goals.
 -   `/end`: End the current session.
 -   `/help`: Show the help message.
 -   `/cancel`: Cancel the current action and return to the mode selection.
 
-### Admin Commands
+### 👑 Admin Commands
 
 -   `/approve <UserID>`: Approve a new user to use the bot. (Note: `ADMIN_USER_ID` is currently hardcoded in `bot/core.py` and will be moved to configuration in a later step).
 
-## Running Tests
+## 🧪 Running Tests
 
 To run the automated tests, first install the development dependencies:
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 ```
 
 Then, run `pytest` from the project root directory:
 
 ```bash
-pytest
+python -m pytest
 ```
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
