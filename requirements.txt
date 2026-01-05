@@ -7,3 +7,4 @@ graphviz
 aiosqlite
 pytest
 pytest-asyncio
+gunicorn
