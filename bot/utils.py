@@ -248,7 +248,8 @@ async def transcribe_audio_with_gemini(audio_path: str, context: ContextTypes.DE
         return "[AI Service Unavailable]"
     try:
         logger.info(f"Uploading audio file {os.path.basename(audio_path)} to Gemini...")
-        audio_file_obj = genai.upload_file(path=audio_path)
+        # Explicitly set mime_type because Gemini API may fail to auto-detect .ogg files from Telegram
+        audio_file_obj = genai.upload_file(path=audio_path, mime_type="audio/ogg")
         logger.info(f"Completed uploading '{audio_file_obj.display_name}'.")
         prompt = AUDIO_TRANSCRIPTION_PROMPT
         logger.info("Sending audio transcription request to Gemini...")
