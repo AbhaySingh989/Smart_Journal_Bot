@@ -57,8 +57,8 @@ logger.info("Bot initialization complete.")
 from bot.core import WEBHOOK_URL
 if WEBHOOK_URL.upper() == "POLLING":
     logger.info("Starting bot in POLLING mode...")
-    # For python-telegram-bot v20+, we use updater.start_polling() or application.run_polling()
-    # Since we are already in an event loop thread, we can just start it.
+    # For python-telegram-bot v20+, we must call start() before start_polling()
+    asyncio.run_coroutine_threadsafe(application.start(), loop).result()
     asyncio.run_coroutine_threadsafe(application.updater.start_polling(), loop)
     logger.info("Polling started.")
 else:
