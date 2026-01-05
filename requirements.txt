@@ -1,0 +1,7 @@
+python-telegram-bot
+google-generativeai
+Flask
+python-dotenv
+Pillow
+graphviz
+aiosqlite

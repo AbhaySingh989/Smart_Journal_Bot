@@ -1,0 +1,18 @@
+# Environment variables and secrets
+.env
+
+# Python virtual environment
+venv/
+
+# Python bytecode and cache directories
+__pycache__/
+
+# Pytest cache
+.pytest_cache/
+
+# Application data, user files, and generated content
+bot_data/
+Observations/
+
+# Windows thumbnail cache
+Thumbs.db
