@@ -49,10 +49,14 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Critical check to ensure all necessary API keys and URLs are present.
-if not TELEGRAM_TOKEN or not GEMINI_API_KEY or not WEBHOOK_URL:
+# Critical check to ensure all necessary API keys are present.
+if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     logger.critical("FATAL: Environment variables missing!")
-    exit("API Key or Webhook URL Error: Check .env file for TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, and WEBHOOK_URL.")
+    exit("API Key Error: Check .env file for TELEGRAM_BOT_TOKEN and GEMINI_API_KEY.")
+
+if not WEBHOOK_URL:
+    logger.warning("WEBHOOK_URL not set. Defaulting to POLLING mode.")
+    WEBHOOK_URL = "POLLING"
 
 # --- CONFIGURE GEMINI AI ---
 GEMINI_MODEL_NAME = 'gemini-2.5-flash'
@@ -166,11 +170,15 @@ async def main() -> None:
     logger.info("Application initialized.")
 
     # --- WEBHOOK SETUP ---
-    # Now that the app is initialized, we can set the webhook.
-    webhook_full_url = f"{WEBHOOK_URL}/webhook"
-    logger.info(f"Setting webhook to {webhook_full_url}...")
-    await application.bot.set_webhook(url=webhook_full_url)
-    logger.info("Webhook set successfully.")
+    # Now that the app is initialized, we can set the webhook if URL is provided.
+    if WEBHOOK_URL.upper() != "POLLING":
+        webhook_full_url = f"{WEBHOOK_URL}/webhook"
+        logger.info(f"Setting webhook to {webhook_full_url}...")
+        await application.bot.set_webhook(url=webhook_full_url)
+        logger.info("Webhook set successfully.")
+    else:
+        logger.info("Deleting any existing webhook for polling...")
+        await application.bot.delete_webhook()
 
     # --- INITIALIZE CUSTOM DATA ---
     # Set the database path and initialize the database.
@@ -183,3 +191,15 @@ async def main() -> None:
 
     # Set the bot commands menu
     await post_set_commands(application)
+
+if __name__ == "__main__":
+    # This allow running the bot in polling mode directly using: python -m bot.core
+    # First, run the internal async setup
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    
+    # Then start polling
+    logger.info("Starting bot in POLLING mode...")
+    # application.run_polling() is blocking
+    from telegram.ext import Application
+    application.run_polling()

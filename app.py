@@ -52,11 +52,21 @@ future = asyncio.run_coroutine_threadsafe(initialize_bot(), loop)
 future.result()
 logger.info("Bot initialization complete.")
 
-# --- SET BOT COMMANDS ---
-logger.info("Scheduling command menu update...")
-# Explicitly set the commands after initialization is complete.
-asyncio.run_coroutine_threadsafe(post_set_commands(application), loop).result()
-logger.info("Command menu update complete.")
+# --- POLLING SUPPORT ---
+# If WEBHOOK_URL is set to POLLING, start the polling loop in our background thread.
+from bot.core import WEBHOOK_URL
+if WEBHOOK_URL.upper() == "POLLING":
+    logger.info("Starting bot in POLLING mode...")
+    # For python-telegram-bot v20+, we use updater.start_polling() or application.run_polling()
+    # Since we are already in an event loop thread, we can just start it.
+    asyncio.run_coroutine_threadsafe(application.updater.start_polling(), loop)
+    logger.info("Polling started.")
+else:
+    # --- SET BOT COMMANDS ---
+    logger.info("Scheduling command menu update...")
+    # Explicitly set the commands after initialization is complete.
+    asyncio.run_coroutine_threadsafe(post_set_commands(application), loop).result()
+    logger.info("Command menu update complete.")
 
 
 # --- FLASK APP INITIALIZATION ---

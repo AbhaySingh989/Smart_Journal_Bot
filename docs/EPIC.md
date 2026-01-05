@@ -48,6 +48,18 @@ This EPIC focuses on transforming the existing Smart Journal Bot into a producti
 - [ ] Exponential backoff logic is added to retry requests on `429 Too Many Requests` errors.
 - [ ] Logs show which model is being used.
 
+### Story 7: Deployment on OCI
+**Status:** Completed
+**Date:** 2026-01-06
+**As a** developer,
+**I want** to deploy the bot on OCI,
+**So that** it is accessible to users.
+
+**Acceptance Criteria:**
+- [x] The bot is running on an OCI instance.
+- [x] The bot is accessible via the Telegram UI.
+- [x] The deployment process is documented in `docs/OCI_Deployment_Guide.md`.
+
 ### Story 4: OCI Deployment Guide
 **Status:** Completed
 **Date:** 2026-01-05
