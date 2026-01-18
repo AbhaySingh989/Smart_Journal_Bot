@@ -18,6 +18,9 @@ AUDIO_TRANSCRIPTION_PROMPT = "Transcribe the following audio file accurately."
 # Prompt for categorizing journal entries
 CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n---\nProvide the following details based on the text:\n1. Sentiment: (Choose one: Positive, Negative, Neutral)\n2. Topics: (List 1-3 brief, comma-separated topics discussed)\n3. Categories: (Choose one or more from the list: [{categories_list}])\nFormat your response ONLY as follows, with each item on a new line:\nSentiment: [Your calculated sentiment]\nTopics: [Your calculated topics]\nCategories: [Your calculated categories]"""
 
+# Prompt for JSON-based categorization
+JSON_CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n---\nProvide the sentiment (Positive, Negative, Neutral), 1-3 brief topics, and select categories from the following list: [{categories_list}].\nYour response MUST be a valid JSON object matching the requested schema."""
+
 # Prompt for therapist-like analysis of journal entries and mind map generation
 THERAPIST_ANALYSIS_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help the user understand their own thoughts and feelings.
 

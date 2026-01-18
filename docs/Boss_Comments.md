@@ -6,8 +6,8 @@ This document tracks high-level architectural feedback and "Boss Mode" directive
 
 ### 1. Refactor Mind Map Generation to JSON-First
 *   **Date Added:** 2026-01-05
-*   **Status:** [ ] Not Started
-*   **Severity:** High (Stability/UX)
+*   **Status:** [x] Dropped (Current DOT generation is stable enough)
+*   **Severity:** Low (Optimizing existing flow instead)
 *   **Context:**
     Currently, the app relies on the LLM to generate raw Graphviz DOT code (`handlers.py` -> `prompts.py`). This is fragile; syntax errors (missing brackets, quotes) cause the entire visualization to fail. The regex extraction is also brittle.
 *   **Actionable Steps:**

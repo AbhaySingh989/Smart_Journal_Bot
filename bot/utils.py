@@ -150,7 +150,7 @@ async def increment_token_usage(prompt_tokens: int = 0, candidate_tokens: int = 
     
     logger.info(f"Tokens Used - Prompt: {prompt_tokens}, Candidate: {candidate_tokens}, Session: {token_data_cache['session']}")
 
-async def generate_gemini_response(prompt_parts: list, safety_settings_override=None, context: ContextTypes.DEFAULT_TYPE = None) -> tuple[str | None, dict | None]:
+async def generate_gemini_response(prompt_parts: list, safety_settings_override=None, generation_config=None, context: ContextTypes.DEFAULT_TYPE = None) -> tuple[str | None, dict | None]:
     """Sends a prompt to the Gemini model and returns the response and usage metadata."""
     if not genai_model:
         logger.error("Gemini model not initialized.")
@@ -170,7 +170,8 @@ async def generate_gemini_response(prompt_parts: list, safety_settings_override=
                 await global_rate_limiter.acquire()
                 response = await genai_model.generate_content_async(
                     prompt_parts, 
-                    safety_settings=safety_settings_override if safety_settings_override else safety_settings
+                    safety_settings=safety_settings_override if safety_settings_override else safety_settings,
+                    generation_config=generation_config
                 )
                 break # Success
             except google.api_core.exceptions.ResourceExhausted as e:

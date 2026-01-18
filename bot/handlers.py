@@ -465,15 +465,45 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 2. Categorize the entry
     await status_msg.edit_text("📊 Analyzing and categorizing entry...")
-    categorization_prompt = CATEGORIZATION_PROMPT.format(text=text, categories_list=", ".join(JOURNAL_CATEGORIES_LIST))
-    categorization_response, _ = await generate_gemini_response([categorization_prompt], context=context)
+    # Use JSON mode for reliable categorization
+    categorization_prompt = JSON_CATEGORIZATION_PROMPT.format(text=text, categories_list=", ".join(JOURNAL_CATEGORIES_LIST))
+    
+    # Define the response schema for Gemini
+    categorization_schema = {
+        "type": "object",
+        "properties": {
+            "sentiment": {"type": "string", "enum": ["Positive", "Negative", "Neutral"]},
+            "topics": {"type": "array", "items": {"type": "string"}},
+            "categories": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["sentiment", "topics", "categories"]
+    }
+    
+    generation_config = {
+        "response_mime_type": "application/json",
+        "response_schema": categorization_schema
+    }
+    
+    categorization_response, _ = await generate_gemini_response(
+        [categorization_prompt], 
+        generation_config=generation_config,
+        context=context
+    )
 
     sentiment, topics, categories = "N/A", "N/A", "N/A"
     if categorization_response and "[BLOCKED:" not in categorization_response and "[API ERROR:" not in categorization_response:
-        sentiment = (re.search(r"Sentiment:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
-        topics = (re.search(r"Topics:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
-        categories = (re.search(r"Categories:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
-        logger.info(f"Categorization for entry {entry_id}: S={sentiment}, T={topics}, C={categories}")
+        try:
+            data = json.loads(categorization_response)
+            sentiment = data.get("sentiment", "Neutral")
+            topics = ", ".join(data.get("topics", []))
+            categories = ", ".join(data.get("categories", []))
+            logger.info(f"Categorization for entry {entry_id} (JSON Mode): S={sentiment}, T={topics}, C={categories}")
+        except Exception as json_err:
+            logger.error(f"Failed to parse JSON categorization for entry {entry_id}: {json_err}")
+            # Fallback to old regex if JSON parsing fails (unlikely with response_schema)
+            sentiment = (re.search(r"Sentiment:\s*(.*)", categorization_response, re.I) or ["","Neutral"])[1].strip()
+            topics = (re.search(r"Topics:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
+            categories = (re.search(r"Categories:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
         
         # 3. Update entry with categorization
         update_data = {"Sentiment": sentiment, "Topics": topics, "Categories": categories}
@@ -481,7 +511,8 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.warning(f"Failed to update journal entry {entry_id} with categorization.")
     else:
         logger.warning(f"Categorization failed or was blocked for entry {entry_id}: {categorization_response}")
-        await update.message.reply_text(f"⚠️ AI categorization failed. {categorization_response or ''}")
+        # We don't want to block the whole process if categorization fails, but we notify
+        await update.message.reply_text(f"⚠️ AI categorization failed. Sentiment analysis will be missing.")
 
     # 4. Perform therapist-like analysis and get mind map DOT code
     await status_msg.edit_text("🧠 Performing deeper analysis...")
