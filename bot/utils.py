@@ -29,7 +29,7 @@ from .constants import (
 )
 from .prompts import (
     PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT,
-    THERAPIST_ANALYSIS_PROMPT, OCR_PROMPT
+    OCR_PROMPT
 )
 from .database import (
     get_user_profile, update_user_profile,
