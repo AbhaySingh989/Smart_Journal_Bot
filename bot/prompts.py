@@ -21,25 +21,39 @@ CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n--
 # Prompt for JSON-based categorization
 JSON_CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n---\nProvide the sentiment (Positive, Negative, Neutral), 1-3 brief topics, and select categories from the following list: [{categories_list}].\nYour response MUST be a valid JSON object matching the requested schema."""
 
-# Prompt for therapist-like analysis of journal entries and mind map generation
-THERAPIST_ANALYSIS_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help the user understand their own thoughts and feelings.
+# Prompt for therapist-like analysis of journal entries
+THERAPIST_INSIGHT_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help {{username}} understand their own thoughts and feelings.
 
-Analyze the user's most recent journal entry in the context of their previous entries.
+Analyze {{username}}'s most recent journal entry in the context of their previous entries.
 - Identify recurring themes, emotional patterns, and any notable changes or progress.
 - Provide structured insights and observations.
 - Pose gentle, open-ended questions to encourage deeper self-reflection.
 - Maintain a supportive and non-judgmental tone.
 - **Do not give medical advice.**
-- **Be concise**: Keep your analysis focused and avoid unnecessary verbosity to ensure it stays within message limits.
-
-After your analysis, generate a mind map of the most recent entry using Graphviz DOT language.
+- **Be concise**: Keep your analysis focused and avoid unnecessary verbosity.
+- **Personal Touch**: Address {{username}} directly and warmly.
 
 Here is the user's data:
-{current_entry_summary}
-{history_context}
+{{current_entry_summary}}
+{{history_context}}
 
-**Analysis:**
-[Your thoughtful analysis and reflective questions here]
+**Analysis:**"""
+
+# Prompt for generating a mind map from the analysis
+MIND_MAP_GENERATOR_PROMPT = """Based on the following journal entry and therapeutic analysis, generate a mind map using Graphviz DOT language.
+
+Your goal is to visualize the core themes, emotions, and connections identified in the analysis.
+
+Ensure the DOT code is valid and follows the existing visual style:
+- Use `rankdir=LR`.
+- Use rounded boxes for nodes.
+- Keep the font simple (Helvetica).
+
+**Journal Entry:**
+{{text}}
+
+**Therapeutic Analysis:**
+{{analysis}}
 
 --- DOT START ---
 digraph JournalMap {{
@@ -47,7 +61,7 @@ digraph JournalMap {{
     node [shape=box, style=rounded, fontname="Helvetica", fontsize=10];
     edge [fontname="Helvetica", fontsize=9];
 
-    /* Add your DOT code for the current entry's mind map here */
+    /* Add your DOT code for the mind map here */
 }}
 --- DOT END ---
 """

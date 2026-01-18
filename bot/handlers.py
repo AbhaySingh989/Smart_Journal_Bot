@@ -29,8 +29,9 @@ from .database import (
     add_goal, get_active_goals
 )
 from .prompts import (
-    PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT,
-    THERAPIST_ANALYSIS_PROMPT, OCR_PROMPT
+    PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT, 
+    JSON_CATEGORIZATION_PROMPT, THERAPIST_INSIGHT_PROMPT, 
+    MIND_MAP_GENERATOR_PROMPT, OCR_PROMPT
 )
 
 # --- BASIC SETUP ---
@@ -514,7 +515,7 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
         # We don't want to block the whole process if categorization fails, but we notify
         await update.message.reply_text(f"⚠️ AI categorization failed. Sentiment analysis will be missing.")
 
-    # 4. Perform therapist-like analysis and get mind map DOT code
+    # 4. Perform therapist-like analysis (Insight Stage)
     await status_msg.edit_text("🧠 Performing deeper analysis...")
     all_entries = await get_journal_entries(user_id=user_id)
     
@@ -526,57 +527,52 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
 
     current_entry_summary = f"Today's Entry ({date_str} {time_str}):\nSentiment: {sentiment}\nTopics: {topics}\nCategories: {categories}\n---\n{text}\n---"
     
-    analysis_prompt = THERAPIST_ANALYSIS_PROMPT.format(current_entry_summary=current_entry_summary, history_context=history_context)
-    analysis_response_text, _ = await generate_gemini_response([analysis_prompt], context=context)
+    # Stage 1: Generate Therapeutic Insights
+    analysis_prompt = THERAPIST_INSIGHT_PROMPT.format(
+        username=username,
+        current_entry_summary=current_entry_summary, 
+        history_context=history_context
+    )
+    analysis_output, _ = await generate_gemini_response([analysis_prompt], context=context)
     
-    # Clean the response of markdown backticks before processing
-    cleaned_response_text = analysis_response_text.strip()
-    if cleaned_response_text.startswith("```") and cleaned_response_text.endswith("```"):
-        # It's a markdown block, let's strip the markers and the language hint (e.g., ```dot)
-        cleaned_response_text = cleaned_response_text[3:-3].strip()
-        if cleaned_response_text.startswith("dot"):
-            cleaned_response_text = cleaned_response_text[3:].strip()
-    else:
-        cleaned_response_text = analysis_response_text
+    if not analysis_output or "[BLOCKED:" in analysis_output or "[API ERROR:" in analysis_output:
+        analysis_output = f"Analysis failed or was blocked: {analysis_output or 'Unknown error'}"
+        logger.warning(f"Analysis failed/blocked for entry {entry_id}")
 
-    analysis_output = "Analysis failed."
-    dot_code = None
-    # Use the CLEANED text for matching
-    if cleaned_response_text and "[BLOCKED:" not in cleaned_response_text and "[API ERROR:" not in cleaned_response_text:
-        dot_match = re.search(r"---\s*DOT START\s*---(.*)---\s*DOT END\s*---", cleaned_response_text, re.DOTALL | re.I)
-        if dot_match:
-            dot_code = dot_match.group(1).strip()
-
-            # The AI might still wrap the inner DOT code with markdown, so clean it.
-            if dot_code.startswith("```") and dot_code.endswith("```"):
-                dot_code = dot_code[3:-3].strip()
-            if dot_code.startswith("dot"): # Also remove the language hint
-                dot_code = dot_code[3:].strip()
-
-            # The analysis is everything EXCEPT the dot block
-            analysis_output = re.sub(r"---\s*DOT START\s*---.*---\s*DOT END\s*---", "", cleaned_response_text, flags=re.DOTALL | re.I).strip()
-            logger.info(f"Extracted and cleaned DOT code (len: {len(dot_code)}) for entry {entry_id}")
-        else:
-            analysis_output = cleaned_response_text # Use the cleaned text for output
-            logger.warning(f"DOT markers were missing in the analysis response for entry {entry_id}")
-    elif analysis_response_text: # Fallback to original response text for error messages
-        analysis_output = f"Analysis failed or was blocked: {analysis_response_text}"
-        logger.warning(f"Analysis failed/blocked for entry {entry_id}: {analysis_response_text}")
-
-    # 5. Send the analysis text in chunks to avoid Telegram limits
+    # 5. Send the analysis text in chunks
     try:
         await status_msg.delete()
     except Exception:
-        pass # Status msg might have been deleted already or never sent
+        pass
     
     max_len = 4000
     chunks = [analysis_output[i:i+max_len] for i in range(0, len(analysis_output), max_len)]
     for chunk in chunks:
         await update.message.reply_text(chunk, parse_mode=None)
 
-    # 6. Generate and send the mind map
+    # 6. Generate and send the mind map (Visualization Stage)
+    map_status = await update.message.reply_text("🗺️ Visualizing connections...")
+    mind_map_prompt = MIND_MAP_GENERATOR_PROMPT.format(
+        text=text,
+        analysis=analysis_output
+    )
+    mind_map_response, _ = await generate_gemini_response([mind_map_prompt], context=context)
+    
+    # Extract DOT code
+    dot_code = None
+    if mind_map_response and "[BLOCKED:" not in mind_map_response and "[API ERROR:" not in mind_map_response:
+        dot_match = re.search(r"---\s*DOT START\s*---(.*)---\s*DOT END\s*---", mind_map_response, re.DOTALL | re.I)
+        if dot_match:
+            dot_code = dot_match.group(1).strip()
+            # Clean markdown if AI wrapped it
+            if dot_code.startswith("```"):
+                dot_code = re.sub(r"```(dot)?", "", dot_code).strip()
+                dot_code = dot_code.rstrip("```").strip()
+            logger.info(f"Extracted DOT code for entry {entry_id} (Multi-Stage)")
+        else:
+            logger.warning(f"DOT markers missing in visualization response for entry {entry_id}")
+
     if dot_code:
-        map_status = await update.message.reply_text("🗺️ Generating mind map...")
         mind_map_image_path = await generate_mind_map_image(dot_code, user_id, is_historical=False)
         if mind_map_image_path:
             try:
