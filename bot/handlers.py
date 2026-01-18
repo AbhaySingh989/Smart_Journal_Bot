@@ -428,7 +428,15 @@ async def handle_chatbot_logic(update: Update, context: ContextTypes.DEFAULT_TYP
     elif "[BLOCKED:" in response_text:
         await status_msg.edit_text(f"My response was blocked by the safety filter: {response_text}")
     else:
-        await status_msg.edit_text(response_text, parse_mode=None)
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        
+        max_len = 4000
+        chunks = [response_text[i:i+max_len] for i in range(0, len(response_text), max_len)]
+        for chunk in chunks:
+            await update.message.reply_text(chunk, parse_mode=None)
 
 async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, input_type: str):
     """Handles messages in Journal mode, saving, analyzing, and generating a mind map."""
@@ -524,8 +532,16 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
         analysis_output = f"Analysis failed or was blocked: {analysis_response_text}"
         logger.warning(f"Analysis failed/blocked for entry {entry_id}: {analysis_response_text}")
 
-    # 5. Send the analysis text
-    await status_msg.edit_text(analysis_output, parse_mode=None)
+    # 5. Send the analysis text in chunks to avoid Telegram limits
+    try:
+        await status_msg.delete()
+    except Exception:
+        pass # Status msg might have been deleted already or never sent
+    
+    max_len = 4000
+    chunks = [analysis_output[i:i+max_len] for i in range(0, len(analysis_output), max_len)]
+    for chunk in chunks:
+        await update.message.reply_text(chunk, parse_mode=None)
 
     # 6. Generate and send the mind map
     if dot_code:

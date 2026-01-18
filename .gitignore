@@ -26,3 +26,4 @@ OCI_Secrets/
 # OCI Documentation to ignore
 docs/OCI bot commands_ref.txt
 docs/OCI_Deployment_Guide.md
+docs/
