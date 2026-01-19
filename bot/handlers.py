@@ -30,8 +30,8 @@ from .database import (
 )
 from .prompts import (
     PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT, 
-    JSON_CATEGORIZATION_PROMPT, THERAPIST_INSIGHT_PROMPT, 
-    MIND_MAP_GENERATOR_PROMPT, OCR_PROMPT
+    JSON_CATEGORIZATION_PROMPT, CONSOLIDATED_ANALYSIS_PROMPT, 
+    THERAPIST_INSIGHT_PROMPT, MIND_MAP_GENERATOR_PROMPT, OCR_PROMPT
 )
 
 # --- BASIC SETUP ---
@@ -464,82 +464,72 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
         await status_msg.edit_text("❌ An error occurred while saving your journal entry.")
         return
 
-    # 2. Categorize the entry
-    await status_msg.edit_text("📊 Analyzing and categorizing entry...")
-    # Use JSON mode for reliable categorization
-    categorization_prompt = JSON_CATEGORIZATION_PROMPT.format(text=text, categories_list=", ".join(JOURNAL_CATEGORIES_LIST))
+    # 2. Consolidated Analysis (Categorization + Insight Stage)
+    await status_msg.edit_text("🧠 Analyzing and reflecting on your entry...")
     
-    # Define the response schema for Gemini
-    categorization_schema = {
+    all_entries = await get_journal_entries(user_id=user_id)
+    history_context = "\n\nPrevious Entries (Summary of up to 5 most recent):\n" if len(all_entries) > 1 else "\n\nThis is the user's first entry."
+    if len(all_entries) > 1:
+        # Create a summary of the last 5 entries (excluding the current one or during the update flow)
+        # We need to exclude the entry we just saved as 'empty' if it shows up in entries
+        history_summary = [f"- On {e.get('Date')}, you felt '{e.get('Sentiment')}' and wrote about: {e.get('Topics')}." for e in [en for en in all_entries if en.get('id') != entry_id][-5:]]
+        history_context += "\n".join(history_summary)
+
+    current_entry_summary = f"Today's Entry ({date_str} {time_str}):\n---\n{text}\n---"
+    
+    analysis_prompt = CONSOLIDATED_ANALYSIS_PROMPT.format(
+        username=username,
+        categories_list=", ".join(JOURNAL_CATEGORIES_LIST),
+        current_entry_summary=current_entry_summary, 
+        history_context=history_context
+    )
+    
+    # Define the response schema for Gemini (Consolidated)
+    consolidated_schema = {
         "type": "object",
         "properties": {
             "sentiment": {"type": "string", "enum": ["Positive", "Negative", "Neutral"]},
             "topics": {"type": "array", "items": {"type": "string"}},
-            "categories": {"type": "array", "items": {"type": "string"}}
+            "categories": {"type": "array", "items": {"type": "string"}},
+            "analysis": {"type": "string"}
         },
-        "required": ["sentiment", "topics", "categories"]
+        "required": ["sentiment", "topics", "categories", "analysis"]
     }
     
     generation_config = {
         "response_mime_type": "application/json",
-        "response_schema": categorization_schema
+        "response_schema": consolidated_schema
     }
     
-    categorization_response, _ = await generate_gemini_response(
-        [categorization_prompt], 
+    analysis_response, _ = await generate_gemini_response(
+        [analysis_prompt], 
         generation_config=generation_config,
         context=context
     )
 
-    sentiment, topics, categories = "N/A", "N/A", "N/A"
-    if categorization_response and "[BLOCKED:" not in categorization_response and "[API ERROR:" not in categorization_response:
+    sentiment, topics, categories, analysis_output = "Neutral", "N/A", "N/A", "Analysis failed."
+    
+    if analysis_response and "[BLOCKED:" not in analysis_response and "[API ERROR:" not in analysis_response:
         try:
-            data = json.loads(categorization_response)
+            data = json.loads(analysis_response)
             sentiment = data.get("sentiment", "Neutral")
             topics = ", ".join(data.get("topics", []))
             categories = ", ".join(data.get("categories", []))
-            logger.info(f"Categorization for entry {entry_id} (JSON Mode): S={sentiment}, T={topics}, C={categories}")
+            analysis_output = data.get("analysis", "No analysis provided.")
+            logger.info(f"Consolidated analysis for entry {entry_id}: S={sentiment}, T={topics}")
         except Exception as json_err:
-            logger.error(f"Failed to parse JSON categorization for entry {entry_id}: {json_err}")
-            # Fallback to old regex if JSON parsing fails (unlikely with response_schema)
-            sentiment = (re.search(r"Sentiment:\s*(.*)", categorization_response, re.I) or ["","Neutral"])[1].strip()
-            topics = (re.search(r"Topics:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
-            categories = (re.search(r"Categories:\s*(.*)", categorization_response, re.I) or ["","N/A"])[1].strip()
-        
+            logger.error(f"Failed to parse consolidated JSON for entry {entry_id}: {json_err}")
+            analysis_output = f"⚠️ Analysis parsing error: {analysis_response}"
+
         # 3. Update entry with categorization
         update_data = {"Sentiment": sentiment, "Topics": topics, "Categories": categories}
         if not await update_journal_entry(entry_id, update_data):
             logger.warning(f"Failed to update journal entry {entry_id} with categorization.")
     else:
-        logger.warning(f"Categorization failed or was blocked for entry {entry_id}: {categorization_response}")
-        # We don't want to block the whole process if categorization fails, but we notify
-        await update.message.reply_text(f"⚠️ AI categorization failed. Sentiment analysis will be missing.")
+        analysis_output = f"Analysis failed or was blocked: {analysis_response or 'Unknown error'}"
+        logger.warning(f"Consolidated analysis failed for entry {entry_id}")
 
-    # 4. Perform therapist-like analysis (Insight Stage)
-    await status_msg.edit_text("🧠 Performing deeper analysis...")
-    all_entries = await get_journal_entries(user_id=user_id)
-    
-    history_context = "\n\nPrevious Entries (Summary of up to 5 most recent):\n" if len(all_entries) > 1 else "\n\nThis is the user's first entry."
-    if len(all_entries) > 1:
-        # Create a summary of the last 5 entries (excluding the current one)
-        history_summary = [f"- On {e.get('Date')}, you felt '{e.get('Sentiment')}' and wrote about: {e.get('Topics')}." for e in all_entries[-6:-1]]
-        history_context += "\n".join(history_summary)
-
-    current_entry_summary = f"Today's Entry ({date_str} {time_str}):\nSentiment: {sentiment}\nTopics: {topics}\nCategories: {categories}\n---\n{text}\n---"
-    
-    # Stage 1: Generate Therapeutic Insights
-    analysis_prompt = THERAPIST_INSIGHT_PROMPT.format(
-        username=username,
-        current_entry_summary=current_entry_summary, 
-        history_context=history_context
-    )
-    analysis_output, _ = await generate_gemini_response([analysis_prompt], context=context)
-    
-    if not analysis_output or "[BLOCKED:" in analysis_output or "[API ERROR:" in analysis_output:
-        analysis_output = f"Analysis failed or was blocked: {analysis_output or 'Unknown error'}"
-        logger.warning(f"Analysis failed/blocked for entry {entry_id}")
-
-    # 5. Send the analysis text in chunks
+    # 4. Send the analysis text in chunks
     try:
         await status_msg.delete()
     except Exception:

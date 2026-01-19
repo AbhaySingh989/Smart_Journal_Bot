@@ -14,7 +14,8 @@ from .constants import (
 )
 from .prompts import (
     PUNCTUATION_PROMPT, AUDIO_TRANSCRIPTION_PROMPT, CATEGORIZATION_PROMPT,
-    THERAPIST_INSIGHT_PROMPT, MIND_MAP_GENERATOR_PROMPT, OCR_PROMPT
+    CONSOLIDATED_ANALYSIS_PROMPT, THERAPIST_INSIGHT_PROMPT, 
+    MIND_MAP_GENERATOR_PROMPT, OCR_PROMPT
 )
 
 # --- BASIC SETUP ---
@@ -200,6 +201,7 @@ async def initialize_db(db_path: str = None):
             {"prompt_id": "punctuation_prompt", "prompt_text": PUNCTUATION_PROMPT, "category": "AI_Utility"},
             {"prompt_id": "audio_transcription_prompt", "prompt_text": AUDIO_TRANSCRIPTION_PROMPT, "category": "AI_Utility"},
             {"prompt_id": "categorization_prompt", "prompt_text": CATEGORIZATION_PROMPT, "category": "AI_Analysis"},
+            {"prompt_id": "consolidated_analysis_prompt", "prompt_text": CONSOLIDATED_ANALYSIS_PROMPT, "category": "AI_Analysis"},
             {"prompt_id": "therapist_insight_prompt", "prompt_text": THERAPIST_INSIGHT_PROMPT, "category": "AI_Analysis"},
             {"prompt_id": "mind_map_generator_prompt", "prompt_text": MIND_MAP_GENERATOR_PROMPT, "category": "AI_Analysis"},
             {"prompt_id": "ocr_prompt", "prompt_text": OCR_PROMPT, "category": "AI_Utility"},

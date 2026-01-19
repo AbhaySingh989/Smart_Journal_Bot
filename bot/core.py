@@ -59,7 +59,7 @@ if not WEBHOOK_URL:
     WEBHOOK_URL = "POLLING"
 
 # --- CONFIGURE GEMINI AI ---
-GEMINI_MODEL_NAME = 'gemini-2.5-flash'
+GEMINI_MODEL_NAME = 'gemini-1.5-flash'
 try:
     # Initialize the Gemini AI client with the API key.
     genai.configure(api_key=GEMINI_API_KEY)

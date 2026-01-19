@@ -161,8 +161,8 @@ async def generate_gemini_response(prompt_parts: list, safety_settings_override=
         logger.info(f"Sending request to Gemini ({len(prompt_parts)} parts)...")
         
         # Retry Logic with Exponential Backoff
-        max_retries = 3
-        base_delay = 2
+        max_retries = 5
+        base_delay = 3
         response = None
         
         for attempt in range(max_retries + 1):

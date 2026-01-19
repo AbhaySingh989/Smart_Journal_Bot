@@ -21,6 +21,38 @@ CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n--
 # Prompt for JSON-based categorization
 JSON_CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text}\n---\nProvide the sentiment (Positive, Negative, Neutral), 1-3 brief topics, and select categories from the following list: [{categories_list}].\nYour response MUST be a valid JSON object matching the requested schema."""
 
+# NEW: Consolidated Analysis Prompt (Categorization + Insight)
+CONSOLIDATED_ANALYSIS_PROMPT = """Act as a thoughtful and reflective therapist named 'Smart Journal Bot'. 
+Your goal is to help {{username}} understand their own thoughts and feelings while also categorizing this entry for their digital diary.
+
+Analyze {{username}}'s most recent journal entry in the context of their previous entries.
+- Identify recurring themes, emotional patterns, and any notable changes or progress.
+- Provide structured insights and observations.
+- Pose gentle, open-ended questions to encourage deeper self-reflection.
+- Maintain a supportive and non-judgmental tone.
+- **Do not give medical advice.**
+- **Be concise**: Keep your analysis focused.
+- **Personal Touch**: Address {{username}} directly and warmly.
+
+Categorization Requirements:
+- Sentiment: Positive, Negative, or Neutral.
+- Topics: 1-3 brief, keyword strings.
+- Categories: Choose from [{{categories_list}}].
+
+Your response MUST be a valid JSON object matching the following schema:
+{{
+  "sentiment": "Positive|Negative|Neutral",
+  "topics": ["topic1", "topic2"],
+  "categories": ["Cat1", "Cat2"],
+  "analysis": "Your therapeutic reflection and questions here."
+}}
+
+Here is the user's data:
+{{current_entry_summary}}
+{{history_context}}
+
+Output the JSON result now:"""
+
 # Prompt for therapist-like analysis of journal entries
 THERAPIST_INSIGHT_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help {{username}} understand their own thoughts and feelings.
 
