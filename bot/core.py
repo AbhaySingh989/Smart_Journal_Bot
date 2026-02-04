@@ -59,7 +59,10 @@ if not WEBHOOK_URL:
     WEBHOOK_URL = "POLLING"
 
 # --- CONFIGURE GEMINI AI ---
-GEMINI_MODEL_NAME = 'gemini-2.0-flash-exp'
+# --- CONFIGURE GEMINI AI ---
+GEMINI_TRANSCRIPTION_MODEL_ID = 'gemini-2.5-flash-lite'
+GEMINI_ANALYSIS_MODEL_ID = 'gemma-3-27b-it'
+
 try:
     # Initialize the Gemini AI client with the API key.
     genai.configure(api_key=GEMINI_API_KEY)
@@ -71,16 +74,37 @@ try:
         {"category": HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
         {"category": HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, "threshold": HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE},
     ]
-    # Create the generative model instance.
-    gemini_model = genai.GenerativeModel(
-        GEMINI_MODEL_NAME,
+    
+    # Initialize TRANSCRIPTION Model (Audio -> Text)
+    # Gemini 2.5 Flash Lite: High RPM, fast, native audio support.
+    transcription_model = genai.GenerativeModel(
+        GEMINI_TRANSCRIPTION_MODEL_ID,
         generation_config=generation_config,
         safety_settings=gemini_safety_settings
     )
-    # Pass the configured model and safety settings to utils for use in other modules.
-    set_gemini_model(gemini_model)
+
+    # Initialize ANALYSIS Model (Text -> Insight/JSON)
+    # Gemma 3 27B: High reasoning, text-optimized.
+    analysis_model = genai.GenerativeModel(
+        GEMINI_ANALYSIS_MODEL_ID,
+        generation_config=generation_config,
+        safety_settings=gemini_safety_settings
+    )
+    
+    # Legacy fallback (alias for analysis model to keep existing code working temporarily)
+    gemini_model = analysis_model 
+    
+    logger.info(f"AI Models Initialized: Transcription={GEMINI_TRANSCRIPTION_MODEL_ID}, Analysis={GEMINI_ANALYSIS_MODEL_ID}")
+
+except Exception as e:
+    logger.error(f"Failed to configure Gemini AI: {e}")
+    transcription_model = None
+    analysis_model = None
+    gemini_model = None
+    # Pass the configured models and safety settings to utils for use in other modules.
+    set_gemini_model(gemini_model, t_model=transcription_model, a_model=analysis_model)
     set_safety_settings(gemini_safety_settings)
-    logger.info(f"Gemini Model '{GEMINI_MODEL_NAME}' configured and set in utils.")
+    logger.info(f"Gemini Models Configured: T={GEMINI_TRANSCRIPTION_MODEL_ID}, A={GEMINI_ANALYSIS_MODEL_ID}")
 except Exception as e:
     logger.critical(f"Failed to configure Gemini: {e}", exc_info=True)
     exit("Gemini Configuration Error.")

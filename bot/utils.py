@@ -41,7 +41,10 @@ from .database import (
 logger = logging.getLogger(__name__)
 
 # --- GLOBAL VARIABLES (initialized in core.py) ---
-genai_model = None
+# --- GLOBAL VARIABLES (initialized in core.py) ---
+genai_model = None # Legacy fallback
+transcription_model = None
+analysis_model = None
 safety_settings: list[SafetySettingDict] = []
 
 # --- DYNAMIC PATHS (set during initialization) ---
@@ -107,10 +110,12 @@ def set_global_paths(base_dir: str):
         os.makedirs(dir_path, exist_ok=True)
     logger.info(f"Data directories ensured: {DATA_DIR}, {TEMP_DIR}, {VISUALIZATIONS_DIR}")
 
-def set_gemini_model(model):
-    """Sets the global Gemini model instance."""
-    global genai_model
+def set_gemini_model(model, t_model=None, a_model=None):
+    """Sets the global Gemini model instances."""
+    global genai_model, transcription_model, analysis_model
     genai_model = model
+    if t_model: transcription_model = t_model
+    if a_model: analysis_model = a_model
 
 def set_safety_settings(settings: list[SafetySettingDict]):
     """Sets the global Gemini safety settings."""
@@ -152,7 +157,16 @@ async def increment_token_usage(prompt_tokens: int = 0, candidate_tokens: int = 
 
 async def generate_gemini_response(prompt_parts: list, safety_settings_override=None, generation_config=None, context: ContextTypes.DEFAULT_TYPE = None) -> tuple[str | None, dict | None]:
     """Sends a prompt to the Gemini model and returns the response and usage metadata."""
-    if not genai_model:
+    target_model = genai_model # Default legacy
+    # If a specific model is not passed via kwargs (unlikely with current setup), 
+    # we determine usage based on context if we wanted to be stricter, but 
+    # for now we rely on the caller or default to analysis_model if set.
+    
+    # Priority: Explicit genai_model override -> analysis_model -> genai_model (legacy)
+    if analysis_model:
+        target_model = analysis_model
+        
+    if not target_model:
         logger.error("Gemini model not initialized.")
         return None, None
     usage_metadata = None
@@ -244,8 +258,8 @@ async def transcribe_audio_with_gemini(audio_path: str, context: ContextTypes.DE
     if not os.path.exists(audio_path):
         logger.error(f"Audio file not found for Gemini transcription: {audio_path}")
         return "[File Not Found Error]"
-    if not genai_model:
-        logger.error("Gemini model not available for audio transcription.")
+    if not transcription_model:
+        logger.error("Gemini Transcription model not available.")
         return "[AI Service Unavailable]"
     try:
         logger.info(f"Uploading audio file {os.path.basename(audio_path)} to Gemini...")
@@ -253,8 +267,8 @@ async def transcribe_audio_with_gemini(audio_path: str, context: ContextTypes.DE
         audio_file_obj = genai.upload_file(path=audio_path, mime_type="audio/ogg")
         logger.info(f"Completed uploading '{audio_file_obj.display_name}'.")
         prompt = AUDIO_TRANSCRIPTION_PROMPT
-        logger.info("Sending audio transcription request to Gemini...")
-        response = await genai_model.generate_content_async([prompt, audio_file_obj])
+        logger.info("Sending audio transcription request to Gemini (Transcription Model)...")
+        response = await transcription_model.generate_content_async([prompt, audio_file_obj])
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             block_reason = response.prompt_feedback.block_reason
             logger.warning(f"Gemini audio transcription blocked: {block_reason}")
