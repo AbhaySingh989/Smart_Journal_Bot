@@ -474,9 +474,18 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
     all_entries = await get_journal_entries(user_id=user_id)
     history_context = "\n\nPrevious Entries (Summary of up to 5 most recent):\n" if len(all_entries) > 1 else "\n\nThis is the user's first entry."
     if len(all_entries) > 1:
-        # Create a summary of the last 5 entries (excluding the current one or during the update flow)
-        # We need to exclude the entry we just saved as 'empty' if it shows up in entries
-        history_summary = [f"- On {e.get('Date')}, you felt '{e.get('Sentiment')}' and wrote about: {e.get('Topics')}." for e in [en for en in all_entries if en.get('id') != entry_id][-5:]]
+        # Use DB-native keys and exclude the current entry.
+        recent_history = [en for en in all_entries if en.get('entry_id') != entry_id][-5:]
+        history_summary = []
+        for e in recent_history:
+            topics_val = e.get("Topics")
+            if isinstance(topics_val, list):
+                topics_str = ", ".join(topics_val) if topics_val else "N/A"
+            else:
+                topics_str = topics_val or "N/A"
+            history_summary.append(
+                f"- On {e.get('entry_date', 'Unknown date')}, you felt '{e.get('Sentiment', 'Unknown')}' and wrote about: {topics_str}."
+            )
         history_context += "\n".join(history_summary)
 
     current_entry_summary = f"Today's Entry ({date_str} {time_str}):\n---\n{text}\n---"
@@ -565,7 +574,13 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
                 dot_code = dot_code.rstrip("```").strip()
             logger.info(f"Extracted DOT code for entry {entry_id} (Multi-Stage)")
         else:
-            logger.warning(f"DOT markers missing in visualization response for entry {entry_id}")
+            # Fallback: extract a raw `digraph ... }` block even when markers are absent.
+            raw_digraph = re.search(r"(digraph\s+[^{\n]*\{.*\})", mind_map_response, re.DOTALL | re.I)
+            if raw_digraph:
+                dot_code = raw_digraph.group(1).strip()
+                logger.info(f"Extracted fallback digraph block for entry {entry_id}")
+            else:
+                logger.warning(f"DOT markers missing in visualization response for entry {entry_id}")
 
     if dot_code:
         mind_map_image_path = await generate_mind_map_image(dot_code, user_id, is_historical=False)

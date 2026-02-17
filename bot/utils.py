@@ -58,6 +58,10 @@ DEFAULT_MODEL_RATE_LIMITS = {
     MODEL_KEY_ANALYSIS: {"rpm": 30, "rpd": 1440},
     MODEL_KEY_TRANSCRIPTION: {"rpm": 10, "rpd": 20},
 }
+MODEL_CAPABILITIES = {
+    MODEL_KEY_ANALYSIS: {"json_mode": False},
+    MODEL_KEY_TRANSCRIPTION: {"json_mode": True},
+}
 
 # --- DYNAMIC PATHS (set during initialization) ---
 BASE_DIR = ""
@@ -212,6 +216,20 @@ def _resolve_model_order(task_type: str, preferred_model_key: str | None = None)
             deduped.append(key)
     return deduped
 
+def _requires_json_mode(generation_config) -> bool:
+    if not generation_config:
+        return False
+    mime = None
+    if isinstance(generation_config, dict):
+        mime = generation_config.get("response_mime_type")
+    else:
+        mime = getattr(generation_config, "response_mime_type", None)
+    return isinstance(mime, str) and mime.lower().strip() == "application/json"
+
+def _supports_json_mode(model_key: str) -> bool:
+    caps = MODEL_CAPABILITIES.get(model_key, {})
+    return bool(caps.get("json_mode", False))
+
 def _model_for_key(model_key: str):
     if model_key == MODEL_KEY_ANALYSIS:
         return analysis_model or genai_model
@@ -245,6 +263,14 @@ async def generate_gemini_response(
 ) -> tuple[str | None, dict | None]:
     """Sends a prompt to the Gemini model and returns the response and usage metadata."""
     model_order = _resolve_model_order(task_type, preferred_model_key)
+    json_required = _requires_json_mode(generation_config)
+    if json_required:
+        json_capable = [k for k in model_order if _supports_json_mode(k)]
+        if json_capable:
+            model_order = json_capable
+        else:
+            logger.error("JSON response requested but no JSON-capable model is configured.")
+            return "[API ERROR: JSON-capable model unavailable]", None
     if not model_order:
         logger.error("Gemini model not initialized.")
         return None, None

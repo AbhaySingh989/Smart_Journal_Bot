@@ -84,3 +84,26 @@ async def test_ocr_falls_back_to_analysis_on_rate_limit(monkeypatch):
     assert text == "fallback-analysis"
     assert transcription.calls == 6
     assert analysis.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_json_mode_request_skips_incompatible_analysis_model(monkeypatch):
+    analysis = DummyModel("analysis-model", text="analysis")
+    transcription = DummyModel("transcription-model", text="json-result")
+
+    utils.set_gemini_model(analysis, t_model=transcription, a_model=analysis)
+    utils.model_rate_limiters = {
+        utils.MODEL_KEY_ANALYSIS: DummyLimiter(),
+        utils.MODEL_KEY_TRANSCRIPTION: DummyLimiter(),
+    }
+    monkeypatch.setattr(utils, "increment_token_usage", AsyncMock())
+
+    text, _ = await utils.generate_gemini_response(
+        ["json prompt"],
+        task_type="analysis",
+        generation_config={"response_mime_type": "application/json"},
+    )
+
+    assert text == "json-result"
+    assert transcription.calls == 1
+    assert analysis.calls == 0

@@ -23,21 +23,21 @@ JSON_CATEGORIZATION_PROMPT = """Analyze the following journal entry:\n---\n{text
 
 # NEW: Consolidated Analysis Prompt (Categorization + Insight)
 CONSOLIDATED_ANALYSIS_PROMPT = """Act as a thoughtful and reflective therapist named 'Smart Journal Bot'. 
-Your goal is to help {{username}} understand their own thoughts and feelings while also categorizing this entry for their digital diary.
+Your goal is to help {username} understand their own thoughts and feelings while also categorizing this entry for their digital diary.
 
-Analyze {{username}}'s most recent journal entry in the context of their previous entries.
+Analyze {username}'s most recent journal entry in the context of their previous entries.
 - Identify recurring themes, emotional patterns, and any notable changes or progress.
 - Provide structured insights and observations.
 - Pose gentle, open-ended questions to encourage deeper self-reflection.
 - Maintain a supportive and non-judgmental tone.
 - **Do not give medical advice.**
 - **Be concise**: Keep your analysis focused.
-- **Personal Touch**: Address {{username}} directly and warmly.
+- **Personal Touch**: Address {username} directly and warmly.
 
 Categorization Requirements:
 - Sentiment: Positive, Negative, or Neutral.
 - Topics: 1-3 brief, keyword strings.
-- Categories: Choose from [{{categories_list}}].
+- Categories: Choose from [{categories_list}].
 
 Your response MUST be a valid JSON object matching the following schema:
 {{
@@ -48,26 +48,26 @@ Your response MUST be a valid JSON object matching the following schema:
 }}
 
 Here is the user's data:
-{{current_entry_summary}}
-{{history_context}}
+{current_entry_summary}
+{history_context}
 
 Output the JSON result now:"""
 
 # Prompt for therapist-like analysis of journal entries
-THERAPIST_INSIGHT_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help {{username}} understand their own thoughts and feelings.
+THERAPIST_INSIGHT_PROMPT = """Act as a thoughtful and reflective therapist. Your goal is to help {username} understand their own thoughts and feelings.
 
-Analyze {{username}}'s most recent journal entry in the context of their previous entries.
+Analyze {username}'s most recent journal entry in the context of their previous entries.
 - Identify recurring themes, emotional patterns, and any notable changes or progress.
 - Provide structured insights and observations.
 - Pose gentle, open-ended questions to encourage deeper self-reflection.
 - Maintain a supportive and non-judgmental tone.
 - **Do not give medical advice.**
 - **Be concise**: Keep your analysis focused and avoid unnecessary verbosity.
-- **Personal Touch**: Address {{username}} directly and warmly.
+- **Personal Touch**: Address {username} directly and warmly.
 
 Here is the user's data:
-{{current_entry_summary}}
-{{history_context}}
+{current_entry_summary}
+{history_context}
 
 **Analysis:**"""
 
@@ -82,10 +82,10 @@ Ensure the DOT code is valid and follows the existing visual style:
 - Keep the font simple (Helvetica).
 
 **Journal Entry:**
-{{text}}
+{text}
 
 **Therapeutic Analysis:**
-{{analysis}}
+{analysis}
 
 --- DOT START ---
 digraph JournalMap {{
