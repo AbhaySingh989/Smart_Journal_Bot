@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 import asyncio
 import os
 import json
@@ -14,7 +15,7 @@ from bot.database import (
 
 import tempfile
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_and_teardown_db():
     """Fixture to set up and tear down a temporary database for each test."""
     # Create a temporary file

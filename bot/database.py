@@ -557,7 +557,7 @@ async def get_token_summary(user_id: int, date: str, db_path: str = None) -> dic
         if conn: conn.close()
 
 # --- CRUD OPERATIONS FOR PROMPTS ---
-async def get_prompt(prompt_id: str) -> dict | None:
+async def get_prompt(prompt_id: str, db_path: str = None) -> dict | None:
     """Retrieves a prompt by its ID."""
     conn = None
     try:

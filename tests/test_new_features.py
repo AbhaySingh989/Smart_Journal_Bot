@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime, timedelta
@@ -16,7 +17,7 @@ from bot.utils import RateLimiter, global_rate_limiter, generate_gemini_response
 
 import tempfile
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def setup_and_teardown_db():
     """Fixture to set up and tear down a temporary database for each test."""
     # Create a temporary file
@@ -83,6 +84,7 @@ async def test_rate_limiter_logic():
 
 @pytest.mark.asyncio
 async def test_gemini_model_config():
-    # Verify strict model name usage
-    from bot.core import GEMINI_MODEL_NAME
-    assert GEMINI_MODEL_NAME == 'gemini-2.5-flash'
+    # Verify dual-model configuration constants exist
+    from bot.core import GEMINI_ANALYSIS_MODEL_ID, GEMINI_TRANSCRIPTION_MODEL_ID
+    assert GEMINI_ANALYSIS_MODEL_ID == 'gemma-3-27b-it'
+    assert GEMINI_TRANSCRIPTION_MODEL_ID == 'gemini-2.5-flash-lite'
