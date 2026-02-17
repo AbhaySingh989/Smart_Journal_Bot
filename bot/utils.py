@@ -7,13 +7,14 @@ import json
 from datetime import datetime, timedelta
 import asyncio
 import functools
+from typing import Any
 
 # Telegram
 from telegram.ext import ContextTypes
 
 # Google Gemini
 import google.generativeai as genai
-from google.generativeai.types import SafetySettingDict, HarmCategory, HarmBlockThreshold
+from google.generativeai.types import SafetySettingDict
 from google.generativeai import types as genai_types
 import google.api_core.exceptions
 
@@ -46,6 +47,17 @@ genai_model = None # Legacy fallback
 transcription_model = None
 analysis_model = None
 safety_settings: list[SafetySettingDict] = []
+model_registry: dict[str, Any] = {}
+model_rate_limiters: dict[str, "RateLimiter"] = {}
+model_rate_limits: dict[str, dict[str, int]] = {}
+
+MODEL_KEY_ANALYSIS = "analysis"
+MODEL_KEY_TRANSCRIPTION = "transcription"
+
+DEFAULT_MODEL_RATE_LIMITS = {
+    MODEL_KEY_ANALYSIS: {"rpm": 30, "rpd": 1440},
+    MODEL_KEY_TRANSCRIPTION: {"rpm": 10, "rpd": 20},
+}
 
 # --- DYNAMIC PATHS (set during initialization) ---
 BASE_DIR = ""
@@ -97,6 +109,16 @@ class RateLimiter:
 # 15 RPM, 1500 RPD
 global_rate_limiter = RateLimiter(rpm=15, rpd=1500)
 
+def configure_model_rate_limits(limits: dict[str, dict[str, int]]):
+    """Configures per-model rate limits and initializes limiter buckets."""
+    global model_rate_limits, model_rate_limiters
+    model_rate_limits = limits or DEFAULT_MODEL_RATE_LIMITS.copy()
+    model_rate_limiters = {}
+    for model_key, limit in model_rate_limits.items():
+        rpm = int(limit.get("rpm", 15))
+        rpd = int(limit.get("rpd", 1500))
+        model_rate_limiters[model_key] = RateLimiter(rpm=rpm, rpd=rpd)
+
 # --- INITIALIZATION FUNCTIONS (called from core.py) ---
 def set_global_paths(base_dir: str):
     """Sets the global data directory paths and ensures they exist."""
@@ -112,10 +134,14 @@ def set_global_paths(base_dir: str):
 
 def set_gemini_model(model, t_model=None, a_model=None):
     """Sets the global Gemini model instances."""
-    global genai_model, transcription_model, analysis_model
+    global genai_model, transcription_model, analysis_model, model_registry
     genai_model = model
-    if t_model: transcription_model = t_model
-    if a_model: analysis_model = a_model
+    transcription_model = t_model
+    analysis_model = a_model
+    model_registry = {
+        MODEL_KEY_ANALYSIS: analysis_model or genai_model,
+        MODEL_KEY_TRANSCRIPTION: transcription_model,
+    }
 
 def set_safety_settings(settings: list[SafetySettingDict]):
     """Sets the global Gemini safety settings."""
@@ -155,97 +181,150 @@ async def increment_token_usage(prompt_tokens: int = 0, candidate_tokens: int = 
     
     logger.info(f"Tokens Used - Prompt: {prompt_tokens}, Candidate: {candidate_tokens}, Session: {token_data_cache['session']}")
 
-async def generate_gemini_response(prompt_parts: list, safety_settings_override=None, generation_config=None, context: ContextTypes.DEFAULT_TYPE = None) -> tuple[str | None, dict | None]:
+def _available_model_keys() -> list[str]:
+    keys = []
+    for model_key in (MODEL_KEY_ANALYSIS, MODEL_KEY_TRANSCRIPTION):
+        if model_registry.get(model_key):
+            keys.append(model_key)
+    if not keys and genai_model:
+        keys.append(MODEL_KEY_ANALYSIS)
+    return keys
+
+def _resolve_model_order(task_type: str, preferred_model_key: str | None = None) -> list[str]:
+    available = _available_model_keys()
+    if not available:
+        return []
+
+    task_defaults = {
+        "transcription": MODEL_KEY_TRANSCRIPTION,
+        "ocr": MODEL_KEY_TRANSCRIPTION,
+        "chat": MODEL_KEY_ANALYSIS,
+        "analysis": MODEL_KEY_ANALYSIS,
+        "mind_map": MODEL_KEY_ANALYSIS,
+        "analytics": MODEL_KEY_ANALYSIS,
+        "punctuation": MODEL_KEY_ANALYSIS,
+    }
+    primary = preferred_model_key or task_defaults.get(task_type, MODEL_KEY_ANALYSIS)
+    order = [primary] + [k for k in available if k != primary]
+    deduped = []
+    for key in order:
+        if key in available and key not in deduped:
+            deduped.append(key)
+    return deduped
+
+def _model_for_key(model_key: str):
+    if model_key == MODEL_KEY_ANALYSIS:
+        return analysis_model or genai_model
+    if model_key == MODEL_KEY_TRANSCRIPTION:
+        return transcription_model
+    return None
+
+async def _log_usage_from_response(response_obj, context: ContextTypes.DEFAULT_TYPE, task_type: str, model_name: str):
+    if not hasattr(response_obj, "usage_metadata"):
+        return None
+    usage_metadata = response_obj.usage_metadata
+    user_id = context.user_data.get("user_id", 0) if context else 0
+    current_mode = context.user_data.get("current_mode", "unknown") if context else "unknown"
+    feature_used = f"{current_mode}:{task_type}"
+    await increment_token_usage(
+        usage_metadata.prompt_token_count,
+        usage_metadata.candidates_token_count,
+        user_id=user_id,
+        feature_used=feature_used,
+        model_name=model_name,
+    )
+    return usage_metadata
+
+async def generate_gemini_response(
+    prompt_parts: list,
+    safety_settings_override=None,
+    generation_config=None,
+    context: ContextTypes.DEFAULT_TYPE = None,
+    task_type: str = "analysis",
+    preferred_model_key: str | None = None,
+) -> tuple[str | None, dict | None]:
     """Sends a prompt to the Gemini model and returns the response and usage metadata."""
-    target_model = genai_model # Default legacy
-    # If a specific model is not passed via kwargs (unlikely with current setup), 
-    # we determine usage based on context if we wanted to be stricter, but 
-    # for now we rely on the caller or default to analysis_model if set.
-    
-    # Priority: Explicit genai_model override -> analysis_model -> genai_model (legacy)
-    if analysis_model:
-        target_model = analysis_model
-        
-    if not target_model:
+    model_order = _resolve_model_order(task_type, preferred_model_key)
+    if not model_order:
         logger.error("Gemini model not initialized.")
         return None, None
-    usage_metadata = None
-    text_response = None
-    try:
-        logger.info(f"Sending request to Gemini ({len(prompt_parts)} parts)...")
-        
-        # Retry Logic with Exponential Backoff
-        max_retries = 5
-        base_delay = 3
-        response = None
-        
-        for attempt in range(max_retries + 1):
-            try:
-                await global_rate_limiter.acquire()
-                response = await genai_model.generate_content_async(
-                    prompt_parts, 
-                    safety_settings=safety_settings_override if safety_settings_override else safety_settings,
-                    generation_config=generation_config
-                )
-                break # Success
-            except google.api_core.exceptions.ResourceExhausted as e:
-                if attempt < max_retries:
-                    delay = base_delay ** (attempt + 1)
-                    logger.warning(f"Gemini Rate Limit Hit (429) on attempt {attempt + 1}. Retrying in {delay}s...")
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error("Max retries reached for Gemini API.")
-                    return "[API ERROR: Rate Limit Exceeded]", None
-        
-        if not response:
-             return "[API ERROR: Unknown Handling]", None
+    logger.info(f"Sending request to Gemini ({len(prompt_parts)} parts), task={task_type}, route={model_order}")
 
-        if hasattr(response, 'usage_metadata'):
-            usage_metadata = response.usage_metadata
-            # Pass user_id, feature_used, model_name to increment_token_usage
-            user_id = context.user_data.get('user_id', 0) if context else 0
-            feature_used = context.user_data.get('current_mode', 'unknown') if context else 'unknown'
-            model_name = genai_model.model_name if genai_model else 'unknown'
-            await increment_token_usage(usage_metadata.prompt_token_count, usage_metadata.candidates_token_count, user_id=user_id, feature_used=feature_used, model_name=model_name)
-        if response.prompt_feedback and response.prompt_feedback.block_reason:
-            block_reason = response.prompt_feedback.block_reason
-            logger.warning(f"Gemini request blocked: {block_reason}")
-            return f"[BLOCKED: {block_reason}]", usage_metadata
-        if hasattr(response, 'text'):
-            text_response = response.text
-            logger.info(f"Received response from Gemini ({len(text_response) if text_response else 0} chars).")
-        elif not (response.prompt_feedback and response.prompt_feedback.block_reason):
-            logger.warning("Gemini returned no text content.")
-            text_response = "[No text content received]"
-        return text_response, usage_metadata
-    except (genai_types.BlockedPromptException, genai_types.StopCandidateException) as safety_exception:
-        logger.warning(f"Gemini Safety Exception ({type(safety_exception).__name__}): {safety_exception}")
-        response_obj = getattr(safety_exception, 'response', None)
-        text_response = "[BLOCKED/STOPPED]"
-        if response_obj:
-             if hasattr(response_obj, 'text'):
-                 text_response = response_obj.text + f" [{type(safety_exception).__name__}]"
-             if hasattr(response_obj, 'usage_metadata'):
-                 usage_metadata = response_obj.usage_metadata
-                 # Pass user_id, feature_used, model_name to increment_token_usage
-                 user_id = context.user_data.get('user_id', 0) if context else 0
-                 feature_used = context.user_data.get('current_mode', 'unknown') if context else 'unknown'
-                 model_name = genai_model.model_name if genai_model else 'unknown'
-                 await increment_token_usage(usage_metadata.prompt_token_count, usage_metadata.candidates_token_count, user_id=user_id, feature_used=feature_used, model_name=model_name)
-        return text_response, usage_metadata
-    except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}", exc_info=True)
-        return f"[API ERROR: {type(e).__name__}]", None
+    max_retries = 5
+    base_delay = 3
+    last_error = None
+
+    for model_key in model_order:
+        target_model = _model_for_key(model_key)
+        if not target_model:
+            continue
+        limiter = model_rate_limiters.get(model_key, global_rate_limiter)
+        model_name = getattr(target_model, "model_name", model_key)
+        response = None
+        try:
+            for attempt in range(max_retries + 1):
+                try:
+                    await limiter.acquire()
+                    response = await target_model.generate_content_async(
+                        prompt_parts,
+                        safety_settings=safety_settings_override if safety_settings_override else safety_settings,
+                        generation_config=generation_config
+                    )
+                    break
+                except google.api_core.exceptions.ResourceExhausted as exhausted_err:
+                    last_error = exhausted_err
+                    if attempt < max_retries:
+                        delay = base_delay ** (attempt + 1)
+                        logger.warning(
+                            f"Rate limit hit on model '{model_name}' (attempt {attempt + 1}/{max_retries + 1}). "
+                            f"Retrying in {delay}s."
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.warning(f"Exhausted retries for model '{model_name}', attempting fallback model.")
+            if not response:
+                continue
+
+            usage_metadata = await _log_usage_from_response(response, context, task_type, model_name)
+            if response.prompt_feedback and response.prompt_feedback.block_reason:
+                block_reason = response.prompt_feedback.block_reason
+                logger.warning(f"Gemini request blocked on {model_name}: {block_reason}")
+                return f"[BLOCKED: {block_reason}]", usage_metadata
+            if hasattr(response, "text"):
+                text_response = response.text
+                logger.info(f"Received response from {model_name} ({len(text_response) if text_response else 0} chars).")
+                return text_response, usage_metadata
+            logger.warning(f"Gemini returned no text content from {model_name}.")
+            return "[No text content received]", usage_metadata
+        except (genai_types.BlockedPromptException, genai_types.StopCandidateException) as safety_exception:
+            logger.warning(f"Gemini safety exception on {model_name}: {safety_exception}")
+            response_obj = getattr(safety_exception, "response", None)
+            text_response = "[BLOCKED/STOPPED]"
+            usage_metadata = None
+            if response_obj:
+                if hasattr(response_obj, "text") and response_obj.text:
+                    text_response = response_obj.text + f" [{type(safety_exception).__name__}]"
+                usage_metadata = await _log_usage_from_response(response_obj, context, task_type, model_name)
+            return text_response, usage_metadata
+        except Exception as model_err:
+            last_error = model_err
+            logger.error(f"Error calling Gemini on model '{model_name}': {model_err}", exc_info=True)
+
+    if isinstance(last_error, google.api_core.exceptions.ResourceExhausted):
+        return "[API ERROR: Rate Limit Exceeded]", None
+    if last_error is not None:
+        return f"[API ERROR: {type(last_error).__name__}]", None
+    return "[API ERROR: Unknown Handling]", None
 
 async def add_punctuation_with_gemini(raw_text: str, context: ContextTypes.DEFAULT_TYPE = None) -> str:
     """Uses Gemini to add punctuation and capitalization to raw text."""
     if not raw_text or raw_text.strip() == "": return raw_text
-    if not genai_model:
+    if not (_model_for_key(MODEL_KEY_ANALYSIS) or _model_for_key(MODEL_KEY_TRANSCRIPTION)):
         logger.warning("Gemini unavailable for punctuation.")
         return raw_text
     prompt = PUNCTUATION_PROMPT.format(raw_text=raw_text)
     logger.info("Sending raw transcript to Gemini for punctuation...")
-    formatted_text, _ = await generate_gemini_response([prompt], context=context)
+    formatted_text, _ = await generate_gemini_response([prompt], context=context, task_type="punctuation")
     if formatted_text and "[BLOCKED:" not in formatted_text and "[API ERROR:" not in formatted_text and "[No text content received]" not in formatted_text:
         logger.info("Punctuation added successfully.")
         return formatted_text.strip()
@@ -262,6 +341,8 @@ async def transcribe_audio_with_gemini(audio_path: str, context: ContextTypes.DE
         logger.error("Gemini Transcription model not available.")
         return "[AI Service Unavailable]"
     try:
+        limiter = model_rate_limiters.get(MODEL_KEY_TRANSCRIPTION, global_rate_limiter)
+        await limiter.acquire()
         logger.info(f"Uploading audio file {os.path.basename(audio_path)} to Gemini...")
         # Explicitly set mime_type because Gemini API may fail to auto-detect .ogg files from Telegram
         audio_file_obj = genai.upload_file(path=audio_path, mime_type="audio/ogg")
@@ -269,6 +350,12 @@ async def transcribe_audio_with_gemini(audio_path: str, context: ContextTypes.DE
         prompt = AUDIO_TRANSCRIPTION_PROMPT
         logger.info("Sending audio transcription request to Gemini (Transcription Model)...")
         response = await transcription_model.generate_content_async([prompt, audio_file_obj])
+        await _log_usage_from_response(
+            response,
+            context=context,
+            task_type="transcription",
+            model_name=getattr(transcription_model, "model_name", MODEL_KEY_TRANSCRIPTION),
+        )
         if response.prompt_feedback and response.prompt_feedback.block_reason:
             block_reason = response.prompt_feedback.block_reason
             logger.warning(f"Gemini audio transcription blocked: {block_reason}")
@@ -435,7 +522,7 @@ async def get_analytics_summary(user_id: int, period_days: int = 7, context: Con
     if word_count_data:
         prompt += f"Word Count Trend: {json.dumps(dict(word_count_data))}\n"
 
-    summary, _ = await generate_gemini_response([prompt], context=context)
+    summary, _ = await generate_gemini_response([prompt], context=context, task_type="analytics")
     return summary if summary else "Could not generate a summary at this time."
 
 async def generate_historical_mind_map(user_id: int) -> str | None:

@@ -24,7 +24,8 @@ from .constants import (
 )
 from .utils import (
     set_global_paths, set_gemini_model, set_safety_settings,
-    initialize_token_data
+    initialize_token_data, configure_model_rate_limits,
+    MODEL_KEY_ANALYSIS, MODEL_KEY_TRANSCRIPTION
 )
 from .database import set_db_path, initialize_db
 from .handlers import (
@@ -93,18 +94,29 @@ try:
     
     # Legacy fallback (alias for analysis model to keep existing code working temporarily)
     gemini_model = analysis_model 
-    
-    logger.info(f"AI Models Initialized: Transcription={GEMINI_TRANSCRIPTION_MODEL_ID}, Analysis={GEMINI_ANALYSIS_MODEL_ID}")
-
-except Exception as e:
-    logger.error(f"Failed to configure Gemini AI: {e}")
-    transcription_model = None
-    analysis_model = None
-    gemini_model = None
-    # Pass the configured models and safety settings to utils for use in other modules.
+    # Always pass configured models to utils on successful initialization.
     set_gemini_model(gemini_model, t_model=transcription_model, a_model=analysis_model)
     set_safety_settings(gemini_safety_settings)
-    logger.info(f"Gemini Models Configured: T={GEMINI_TRANSCRIPTION_MODEL_ID}, A={GEMINI_ANALYSIS_MODEL_ID}")
+
+    # Per-model free-tier limits (override with env vars as needed).
+    model_limits = {
+        MODEL_KEY_ANALYSIS: {
+            "rpm": int(os.getenv("GEMINI_ANALYSIS_RPM", "30")),
+            "rpd": int(os.getenv("GEMINI_ANALYSIS_RPD", "1440")),
+        },
+        MODEL_KEY_TRANSCRIPTION: {
+            "rpm": int(os.getenv("GEMINI_TRANSCRIPTION_RPM", "10")),
+            "rpd": int(os.getenv("GEMINI_TRANSCRIPTION_RPD", "20")),
+        },
+    }
+    configure_model_rate_limits(model_limits)
+
+    logger.info(
+        "AI models initialized. "
+        f"Transcription={GEMINI_TRANSCRIPTION_MODEL_ID}, "
+        f"Analysis={GEMINI_ANALYSIS_MODEL_ID}, "
+        f"Limits={model_limits}"
+    )
 except Exception as e:
     logger.critical(f"Failed to configure Gemini: {e}", exc_info=True)
     exit("Gemini Configuration Error.")

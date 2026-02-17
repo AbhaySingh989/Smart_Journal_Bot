@@ -12,7 +12,7 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
 - **👤 User Profiles:** The bot maintains user profiles to provide a personalized experience.
 - **🪙 Token Usage Tracking:** Monitors and logs the token usage for the generative AI models.
 - **🔐 Access Control:** A system for approving new users, managed by an administrator.
-- **🛡️ Error Handling & Rate Limiting:** Robust error handling and built-in rate limiting for Gemini Free Tier.
+- **🛡️ Error Handling & Per-Model Rate Limiting:** Robust error handling, model-aware routing, and separate limiter buckets for Gemini Free Tier.
 - **☁️ OCI Ready:** Fully containerized with Docker for seamless deployment on Oracle Cloud.
 
 ## 📂 Project Structure
@@ -67,7 +67,7 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
 
 - Python 3.11+
 - A Telegram Bot Token
-- A Google API Key for Generative AI (Gemini 2.5 Flash)
+- A Google API Key for Gemini API
 - `Docker` & `Docker Compose` (Recommended for OCI)
 - `graphviz` (System-wide if running natively)
 
@@ -101,7 +101,22 @@ This is a sophisticated, multi-functional Telegram bot designed to serve as a pe
     TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
     GEMINI_API_KEY="your_google_api_key"
     WEBHOOK_URL="your_webhook_url_from_ngrok_or_pythonanywhere"
+    GEMINI_ANALYSIS_RPM="30"          # Optional override
+    GEMINI_ANALYSIS_RPD="1440"        # Optional override
+    GEMINI_TRANSCRIPTION_RPM="10"     # Optional override
+    GEMINI_TRANSCRIPTION_RPD="20"     # Optional override
     ```
+
+### Gemini Dual-Model Routing (Implemented)
+
+The bot now uses two different LLMs with explicit task-based routing and fallback:
+
+- **Analysis model:** `gemma-3-27b-it`
+  - Used for chat, journal analysis, mind-map generation, punctuation, and analytics summary.
+- **Transcription/OCR model:** `gemini-2.5-flash-lite`
+  - Used for audio transcription and OCR/image extraction tasks.
+
+If the primary model for a task is rate-limited, the bot automatically retries and can fall back to the other available model (where compatible).
 
 ### Running the Bot (Local Development with ngrok)
 

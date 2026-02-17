@@ -366,7 +366,11 @@ async def get_text_from_input(update: Update, context: ContextTypes.DEFAULT_TYPE
             await status_msg.edit_text("📄 Processing image with AI Vision (OCR)...")
             try:
                 with PIL.Image.open(temp_file_path) as img:
-                    extracted_text_result, _ = await generate_gemini_response([OCR_PROMPT, img], context=context)
+                    extracted_text_result, _ = await generate_gemini_response(
+                        [OCR_PROMPT, img],
+                        context=context,
+                        task_type="ocr"
+                    )
             except Exception as img_err:
                 logger.error(f"Error processing image {temp_file_path}: {img_err}")
                 return None, input_type, "Error processing image file."
@@ -423,7 +427,7 @@ async def handle_chatbot_logic(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     logger.info(f"Chatbot logic received text (len: {len(text)}) from user {user_id}")
     status_msg = await update.message.reply_text("🤔 Thinking...")
-    response_text, _ = await generate_gemini_response([text], context=context)
+    response_text, _ = await generate_gemini_response([text], context=context, task_type="chat")
     if response_text is None or "[API ERROR:" in response_text:
         await status_msg.edit_text(f"Sorry, there was an error contacting the AI. {response_text or ''}")
     elif "[BLOCKED:" in response_text:
@@ -504,7 +508,8 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
     analysis_response, _ = await generate_gemini_response(
         [analysis_prompt], 
         generation_config=generation_config,
-        context=context
+        context=context,
+        task_type="analysis"
     )
 
     sentiment, topics, categories, analysis_output = "Neutral", "N/A", "N/A", "Analysis failed."
@@ -546,7 +551,7 @@ async def handle_journal_logic(update: Update, context: ContextTypes.DEFAULT_TYP
         text=text,
         analysis=analysis_output
     )
-    mind_map_response, _ = await generate_gemini_response([mind_map_prompt], context=context)
+    mind_map_response, _ = await generate_gemini_response([mind_map_prompt], context=context, task_type="mind_map")
     
     # Extract DOT code
     dot_code = None

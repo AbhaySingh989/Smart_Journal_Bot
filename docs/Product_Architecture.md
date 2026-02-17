@@ -72,9 +72,10 @@ The Journal Agent is a multi-modal Telegram bot designed to facilitate personal 
 
 ### 3.3. AI Models
 
-*   **Google Gemini (`gemini-2.5-flash`)**: The primary generative AI model.
-    *   **Role**: Utilized for all AI-powered features: text analysis, summaries, audio transcription, and OCR.
-    *   **Justification**: Updated to `2.5-flash` for significantly faster response times and improved reasoning while staying within the Free Tier limits. Includes local `RateLimiter` to manage 15 RPM / 1500 RPD.
+*   **Dual-model Gemini architecture**:
+    *   **`gemma-3-27b-it` (Analysis model)**: Used for chat, journal analysis, mind-map generation, punctuation, and analytics summaries.
+    *   **`gemini-2.5-flash-lite` (Transcription/OCR model)**: Used for audio transcription and OCR/image extraction.
+    *   **Justification**: Splits workloads across separate free-tier model buckets and improves resilience via model-aware fallback.
 
 ### 3.4. Data Storage
 
@@ -487,9 +488,9 @@ graph TD
     *   **Responsibilities**:
         *   Provides a collection of reusable helper functions that abstract away complex logic.
         *   **Global Path Management**: `set_global_paths` ensures data directories are correctly configured and exist.
-        *   **Gemini Model Configuration**: `set_gemini_model` and `set_safety_settings` make the configured Gemini model globally accessible.
+        *   **Gemini Model Configuration**: `set_gemini_model`, `set_safety_settings`, and `configure_model_rate_limits` wire dual models and per-model limit buckets.
         *   **User Profile & Token Data Access**: `load_profiles`, `save_profiles`, `initialize_token_data`, `increment_token_usage` act as wrappers around `bot/database.py` functions, sometimes adding in-memory caching or specific logging.
-        *   **Gemini API Call Wrapper**: `generate_gemini_response` handles the actual calls to the Google Gemini API, including error handling and token usage logging.
+        *   **Gemini API Call Wrapper**: `generate_gemini_response` performs task-based model routing, exponential-backoff retries, fallback routing, and token usage logging.
         *   **AI-Powered Text Enhancement**: `add_punctuation_with_gemini` uses Gemini to improve raw text readability.
         *   **Audio Transcription**: `transcribe_audio_with_gemini` handles uploading audio to Gemini and retrieving transcriptions.
         *   **Mind Map Generation**: `generate_mind_map_image` uses Graphviz to create visual representations.
@@ -608,7 +609,7 @@ Operating the Journal Agent bot involves several potential cost factors, especia
         3. Clone and set `.env`.
         4. Run `docker-compose up -d`.
     *   **SQLite Persistence**: Managed via Docker Volumes to ensure data survives container restarts.
-    *   **Rate Limiting**: Integrated `RateLimiter` handles Gemini API throttling automatically.
+*   **Rate Limiting**: Integrated per-model `RateLimiter` buckets handle Gemini API throttling independently for each model.
 
 ---
 
