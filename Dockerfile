@@ -35,5 +35,6 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 # Run with Gunicorn, single worker to avoid SQLite locking issues and maintain state consistency
+#OPENAI
 # Timeout increased to 120s to allow for potentially long AI processing
 CMD ["gunicorn", "--workers", "1", "--timeout", "120", "--bind", "0.0.0.0:5000", "app:app"]
