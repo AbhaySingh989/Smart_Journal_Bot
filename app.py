@@ -82,6 +82,7 @@ def webhook():
         update = Update.de_json(update_data, application.bot)
         
         # Schedule the processing of the update on the event loop.
+        #OPENAI
         # This is thread-safe and allows the async function to run in the background.
         asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         
