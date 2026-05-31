@@ -8,3 +8,4 @@ aiosqlite
 pytest
 pytest-asyncio
 gunicorn
+#OpenAI
