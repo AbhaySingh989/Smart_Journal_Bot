@@ -2,6 +2,7 @@
 
 This document outlines the step-by-step plan to refactor the Telegram Journal Bot for better stability, scalability, and functionality, with a specific focus on reliable deployment on the PythonAnywhere free tier.
 
+
 ---
 
 ### **Guiding Principles & Workflow**
