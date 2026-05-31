@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # --- CONSTANTS AND FILE PATHS ---
-
+#
 # Conversation states for the ConversationHandler.
 SELECTING_MODE, CHATBOT_MODE, JOURNAL_MODE, OCR_MODE, SETTING_USERNAME = ("SELECTING_MODE", "CHATBOT_MODE", "JOURNAL_MODE", "OCR_MODE", "SETTING_USERNAME")
 END = "END"
